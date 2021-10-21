@@ -14,6 +14,7 @@ import glob
 import numpy as np
 from astropy.io import fits
 import subprocess
+from make_images import generate_total_images, draw_filter_images
 
 SVM_QUALITY_TESTING="on"
 
@@ -251,36 +252,89 @@ def run_svm(dataset):
         os.chdir(cwd)
 
 
-def get_files_for_image_gen(dataset):
+# def get_files_for_image_gen(dataset):
+#     mutations = glob.glob(f"{dataset}_*")
+#     corr_folder = f"./{dataset}_corrs"
+#     for m in mutations:
+#         fits_file = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
+#         p_cat = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
+#         s_cat = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
+#         g_cat = glob.glob(f"{m}/*GAIA*.ecsv")[0]
+#         D = [
+#             f"{corr_folder}/{m}/fits", 
+#             f"{corr_folder}/{m}/cat/gaia", 
+#             f"{corr_folder}/{m}/cat/point", 
+#             f"{corr_folder}/{m}/cat/segment"
+#             ]
+#         for d in D:
+#             os.makedirs(d, exist_ok=True)
+#         shutil.copy(fits_file, f"{D[0]}/"+os.path.basename(fits_file))
+#         shutil.copy(g_cat, f"{D[1]}/"+os.path.basename(g_cat))
+#         shutil.copy(p_cat, f"{D[2]}/"+os.path.basename(p_cat))
+#         shutil.copy(s_cat, f"{D[3]}/"+os.path.basename(s_cat))
+#     return corr_folder
+
+
+def get_total_image_gen_files(dataset):
+    c_dir = f"./{dataset}_total"
+    f_dir, g_dir = f"{c_dir}/fits", f"{c_dir}/cat/gaia"
+    p_dir, s_dir, = f"{c_dir}/cat/point", f"{c_dir}/cat/segment"
+    for d in [c_dir, f_dir, g_dir, p_dir, s_dir]:
+        os.makedirs(d, exist_ok=True)
     mutations = glob.glob(f"{dataset}_*")
-    corr_folder = f"./{dataset}_corrs"
     for m in mutations:
-        fits_file = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
-        p_cat = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
-        s_cat = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
-        #g_cat = glob.glob(f"{m}/*GAIA*.ecsv")[0]
-        F = f"{corr_folder}/{m}/fits"
-        #G = f"{corr_folder}/{m}/cat/gaia"
-        P, S = f"{corr_folder}/{m}/cat/point", f"{corr_folder}/{m}/cat/segment"
-        # dirs = [F, G, P, S]
-        dirs = [F, P, S]
-        for d in dirs:
-            os.makedirs(d, exist_ok=True)
-        shutil.copy(fits_file, f"{F}/"+os.path.basename(fits_file))
-        #shutil.copy(g_cat, f"{G}/"+os.path.basename(g_cat))
-        shutil.copy(p_cat, f"{P}/"+os.path.basename(p_cat))
-        shutil.copy(s_cat, f"{S}/"+os.path.basename(s_cat))
-    return corr_folder
+        # copy and rename relevant fits and catalog files 
+        # hst + f475w_clear2l_all_stat + wfc_total_j6m903_drc.fits
+        mm = '_'.join(m.split('_')[1:])
+        f1 = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
+        f2 = f"{f_dir}/hst_{mm}_{'_'.join(os.path.basename(f1).split('_')[4:])}"
+        shutil.copy(f1, f2)
+        g1 = glob.glob(f"{m}/*GAIA*.ecsv")[0]
+        g2 = f"{g_dir}/hst_{mm}_{'_'.join(os.path.basename(g1).split('_')[4:])}"
+        shutil.copy(g1, g2)
+        p1 = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
+        p2 = f"{p_dir}/hst_{mm}_{'_'.join(os.path.basename(p1).split('_')[4:])}"
+        shutil.copy(p1, p2)
+        s1 = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
+        s2 = f"{s_dir}/hst_{mm}_{'_'.join(os.path.basename(s1).split('_')[4:])}"
+        shutil.copy(s1, s2)
+    return c_dir
+
+def get_filter_image_gen_files(dataset):
+    c_dir = f"./{dataset}_filters"
+    fits_dir = f"{c_dir}/fits"
+    os.makedirs(fits_dir, exist_ok=True)
+    mutations = glob.glob(f"{dataset}_*")
+    for m in mutations:
+        mm = '_'.join(m.split('_')[1:])
+        splits = mm.split('_')
+        if len(splits) > 3:
+            flt = splits[:2]
+        else:
+            flt = splits[0]
+        flt1 = glob.glob(f"{m}/hst_*_{flt}_{dataset}_dr?.fits")[0]
+        flt2 = f"{fits_dir}/hst_{mm}_{'_'.join(os.path.basename(flt1).split('_')[4:])}"
+        shutil.copy(flt1, flt2)
+    return c_dir
 
 
-def generate_images(dataset):
-    corr_folder = get_files_for_image_gen(dataset)
-    mutations = glob.glob(f"{corr_folder}/{dataset}_*")
-    for m in mutations:
-        cmd = ["python", "make_images.py", f"{m}/fits", "-i", "total", "-g", "1"]
-        err = subprocess.call(cmd)
-        if err:
-            print(f"Image Generator error for {m}")
+def generate_images(dataset, filters=False):
+    if filters is True:
+        c_dir = get_filter_image_gen_files(dataset)
+        filter_path = f"{c_dir}/fits"
+        filter_files = os.listdir(filter_path)
+        draw_filter_images(filter_files, filter_path, figsize=(24,24))
+    else:
+        c_dir = get_total_image_gen_files(dataset, filters=filters)
+        generate_total_images(f"{c_dir}/fits", generator=1)
+
+    # mutations = glob.glob(f"{c_dir}/{dataset}_*")
+    # for m in mutations:
+    #     cmd = ["python", "make_images.py", f"{m}/fits", "-i", "total", "-g", "1"]
+    #     err = subprocess.call(cmd)
+    #     if err:
+    #         print(f"Image Generator error for {m}")
+
 
 
 #TODO: drizzlepac h5 file creator from json files
