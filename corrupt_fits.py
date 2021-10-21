@@ -15,6 +15,7 @@ import numpy as np
 from astropy.io import fits
 import subprocess
 
+SVM_QUALITY_TESTING="on"
 
 def pick_random_exposures(dataset):
     hapdir = os.path.join('.', dataset)
@@ -76,8 +77,10 @@ def modify_paths(drizzle_dct, name):
 
 def pick_random_subset(filter_files):
     n_files = len(filter_files)
-    n_corruptions = np.random.randint(2, n_files)
-    if n_files < n_corruptions:
+    if n_files > 1:
+        n_corruptions = np.random.randint(1, n_files)
+    else:
+        print(f"WARNING - {n_files} exposure for this filter.")
         n_corruptions = n_files
     print(f"\nSelecting {n_corruptions} out of {n_files} files")
     np.random.shuffle(filter_files)
@@ -189,12 +192,11 @@ def run_header_corruption(selected_files, level="any", mode="stoc"):
     
 
 def artificial_misalignment(dataset, selector):
-    shutil.copytree(dataset, dataset+"_corr")
+    shutil.copytree(dataset, f"{dataset}_{selector}")
+    dataset = f"{dataset}_{selector}"
     if selector == "rex":
-        dataset = dataset+"_rex"
         selected_files = pick_random_exposures(dataset)
     elif selector == "rfi":
-        dataset = dataset+"_rfi"
         selected_files = pick_random_filter(dataset)
     run_header_corruption(selected_files)
 
@@ -208,6 +210,7 @@ def multiple_permutations(dataset, exp, level, mode):
         shutil.copytree(dataset, name)
         drizzle_mod = modify_paths(drizzle_dct, name)
         out = sys.stdout
+        err = 0
         with open(f"./{name}/corruption.txt", 'w') as logfile:
             sys.stdout = logfile
             print(separator)
@@ -217,83 +220,116 @@ def multiple_permutations(dataset, exp, level, mode):
                 print("\nALL FILES: ", selected_files)
             else:
                 filter_files = drizzle_mod[f]
+                if len(filter_files) == 1:
+                    err += 1
                 selected_files = pick_random_subset(filter_files)
             run_header_corruption(selected_files, level=level, mode=mode)
             sys.stdout = out
+        if err == 1:
+            with open(f"./{name}/warning.txt", 'w') as warning:
+                sys.stdout = warning
+                print("WARNING: only 1 exposure but you requested a subset")
+                sys.stdout = out
+
 
 
 def run_svm(dataset):
+    os.environ.get('SVM_QUALITY_TESTING', "on")
     mutations = glob.glob(f"{dataset}_*")
     cwd = os.getcwd()
     for m in mutations:
         os.chdir(m)
-        drz_file = glob.glob(f"*.out")[0]
-        cmd = ["runsinglehap", drz_file]
-        err = subprocess.call(cmd)
-        if err:
-            print(f"SVM failed to run for {m}")
+        warning = f"./warning.txt"
+        if os.path.exists(warning):
+            print(f"Skipping {m} - see warning file")
+        else:
+            drz_file = glob.glob(f"*.out")[0]
+            cmd = ["runsinglehap", drz_file]
+            err = subprocess.call(cmd)
+            if err:
+                print(f"SVM failed to run for {m}")
         os.chdir(cwd)
 
 
 def get_files_for_image_gen(dataset):
-    corr_folder = f"./{dataset}_corrs"
-    os.mkdir(corr_folder, exist_ok=True)
     mutations = glob.glob(f"{dataset}_*")
+    corr_folder = f"./{dataset}_corrs"
     for m in mutations:
         fits_file = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
-        p_cat = glob.glob(f"{m}/hst_*_total_{dataset}_point-cat.ecsv")[0]
-        s_cat = glob.glob(f"{m}/hst_*_total_{dataset}_segment-cat.ecsv")[0]
-        g_cat = glob.glob(f"{m}/hst_*_GAIAeDR3_ref_cat.ecsv")[0]
-        F, G = f"{corr_folder}/{m}/fits", f"{corr_folder}/{m}/cat/gaia"
+        p_cat = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
+        s_cat = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
+        #g_cat = glob.glob(f"{m}/*GAIA*.ecsv")[0]
+        F = f"{corr_folder}/{m}/fits"
+        #G = f"{corr_folder}/{m}/cat/gaia"
         P, S = f"{corr_folder}/{m}/cat/point", f"{corr_folder}/{m}/cat/segment"
-        dirs = [F, G, P, S]
+        # dirs = [F, G, P, S]
+        dirs = [F, P, S]
         for d in dirs:
-            os.makedirs(d)
+            os.makedirs(d, exist_ok=True)
         shutil.copy(fits_file, f"{F}/"+os.path.basename(fits_file))
-        shutil.copy(g_cat, f"{G}/"+os.path.basename(g_cat))
+        #shutil.copy(g_cat, f"{G}/"+os.path.basename(g_cat))
         shutil.copy(p_cat, f"{P}/"+os.path.basename(p_cat))
         shutil.copy(s_cat, f"{S}/"+os.path.basename(s_cat))
+    return corr_folder
 
 
 def generate_images(dataset):
-    corr_folder = f"./{dataset}_corrs"
+    corr_folder = get_files_for_image_gen(dataset)
     mutations = glob.glob(f"{corr_folder}/{dataset}_*")
-    cwd = os.getcwd()
     for m in mutations:
-        os.chdir(m)
-        cmd = ["python", "make_images.py", "fits", "-i", "total", "-g", "1"]
+        cmd = ["python", "make_images.py", f"{m}/fits", "-i", "total", "-g", "1"]
         err = subprocess.call(cmd)
         if err:
             print(f"Image Generator error for {m}")
-        os.chdir(cwd)
 
 
 #TODO: drizzlepac h5 file creator from json files
-def make_h5_file():
-    mutations = glob.glob(f"{dataset}_*")
-    for m in mutations:
-        pass
+# def make_h5_file():
+#     mutations = glob.glob(f"{dataset}_*")
+#     for m in mutations:
+#         pass
+# from drizzlepac.haputils import diagnostic_json_harvester as djh
+#     djh.json_harvester(
+#         json_search_path='./', 
+#         json_patterns=['*_svm_*.fits'], 
+#         output_filename_basename='ml_train_dataframe'
+#         )
+# replace the *_svm_*.fits  with the patterns for the JSON filenames that you want included in the HDF5 file.  
+# This should only be related JSON files, such as only JSON files generated during SVM processing with svm in the filename or only JSON files generated during MVM processing with mvm in the name.  
+# It will also pull JSON files from all sub-directories if that is what you specify through the use of glob in order to allow you to call it once in the parent directory for multiple sub-directories worth of results to get just one combined HDF file. 
+
+def run_multiple(dataset_directory, runsvm=1, imagegen=1):
+    visits = os.listdir(dataset_directory)
+    for visit in visits:
+        multiple_permutations(visit, "all", "any", "stat")
+        multiple_permutations(visit, "all", "any", "stoc")
+        multiple_permutations(visit, "sub", "any", "stat")
+        multiple_permutations(visit, "sub", "any", "stoc")
+        if runsvm == 1:
+            run_svm(visit)
+        if imagegen == 1:
+            generate_images(visit)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("dataset", type=str, help="path to SVM dataset directory")
-    parser.add_argument("selector", type=str, choices=["rex", "rfi", "multi"], help="rex: randomly select subset of exposures from any filter; rfi: select all exposures from randomly selected filter; multi: all exposures of a single filter, repeated for each filter (creates multiple corruption permutations")
-    parser.add_argument("-e", "--exposures", type=str, choices=["all", "sub"], help="all or subset of exposures")
-    parser.add_argument("-m", "--mode", type=str, choices=["stat", "stoc"], help="apply consistent (static) or randomly varying (stochastic) corruptions to each exposure")
-    parser.add_argument("-l", "--level", type=str, choices=["major", "standard", "minor", "any"], help="lambda relative error level")
+    parser = argparse.ArgumentParser(prog="Corrupt SVM", usage="python corrupt_svm.py j8ep07 multi -e=sub -m=stoc")
+    parser.add_argument("dataset", type=str, help="path to SVM dataset directory (single visit or collection of visits if using `selector=multi`")
+    parser.add_argument("selector", type=str, choices=["rex", "rfi", "mfi", "multi"], help="`rex`: randomly select subset of exposures from any filter; `rfi`: select all exposures from randomly selected filter; `mfi`: exposures of one filter, repeated for every filter in dataset; `multi`: creates sub- and all- MFI permutations for group of datasets")
+    parser.add_argument("-e", "--exposures", type=str, choices=["all", "sub"], default="all", help="all or subset of exposures")
+    parser.add_argument("-m", "--mode", type=str, choices=["stat", "stoc"], default="stoc", help="apply consistent (static) or randomly varying (stochastic) corruptions to each exposure")
+    parser.add_argument("-l", "--level", type=str, choices=["major", "standard", "minor", "any"], default="any", help="lambda relative error level")
+    parser.add_argument("-r", "--runsvm", type=int, choices=[0,1], default=0, help="Run SVM on corrupted dataset(s)")
+    parser.add_argument("-i", "--imagegen", type=int, choices=[0,1], default=0, help="generate images (runsvm must also be set to 1)")
     # get user-defined args and/or set defaults
     args = parser.parse_args()
     dataset, selector = args.dataset, args.selector
-    exp, mode = args.exposures, args.mode
-    level = args.level
-    if exp is None:
-        exp = "all"
-    if mode is None:
-        mode = "stoc"
-    if level is None:
-        level = "any"
+    exp, mode, level = args.exposures, args.mode, args.level
+    # all-in-one shot: 'dataset' points to directory of multiple visits and script generates all permutations for each one
     if selector == "multi":
+        run_multiple(dataset, runsvm=args.runsvm, imagegen=args.imagegen)
+    elif selector == "mfi":
         multiple_permutations(dataset, exp, level, mode)
-    else:
+    elif selector in ["rex", "rfi"]:
         artificial_misalignment(dataset, selector)
+    else:
+        print("Selector must be one of: rex, rfi, mfi, multi")

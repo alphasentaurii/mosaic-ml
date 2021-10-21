@@ -35,6 +35,8 @@ def draw_catalogs(input_fits, name, catalog):
     cfile = os.path.join(cpath, cname)
     if os.path.exists(cfile):
         cat = ascii.read(cfile).to_pandas()
+    else:
+        cat = ''
     if len(cat) > 0:
         if 'Flags' in cat.columns:
             cflags = cat['Flags']
