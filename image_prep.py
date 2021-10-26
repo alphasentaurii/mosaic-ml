@@ -295,23 +295,23 @@ def training_img_aug(train, test, val):
     index = (train_idx, test[0], val[0])
     return index, X_tr, y_tr, X_ts, y_ts, X_vl, y_vl
 
+if __name__ == '__main__':
+    df = pd.read_csv(f'{SUBFOLDER}/detection_cleaned.csv', index_col='index')
+    # O, S, G = sort_copy_image_labels(df, DETDIRS=None)
+    X = df.drop('label', axis=1, inplace=False)
+    y = df['label']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True, stratify=y)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, shuffle=True, stratify=y_train)
 
-df = pd.read_csv(f'{SUBFOLDER}/detection_cleaned.csv', index_col='index')
-# O, S, G = sort_copy_image_labels(df, DETDIRS=None)
-X = df.drop('label', axis=1, inplace=False)
-y = df['label']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True, stratify=y)
-X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, shuffle=True, stratify=y_train)
 
+    xtrain_idx = X_train.index
+    xtest_idx = X_test.index
+    xval_idx = X_val.index
+    image_sets = [X_train, X_test, X_val]
+    train, test, val = make_image_sets(*image_sets, w=SIZE, h=SIZE, d=DEPTH, exp=None)
+    index, X_tr, y_tr, X_ts, y_ts, X_vl, y_vl = training_img_aug(train, test, val)
+    train_idx = train[0]
+    test_idx = test[0]
+    val_idx = val[0]
 
-xtrain_idx = X_train.index
-xtest_idx = X_test.index
-xval_idx = X_val.index
-image_sets = [X_train, X_test, X_val]
-train, test, val = make_image_sets(*image_sets, w=SIZE, h=SIZE, d=DEPTH, exp=None)
-index, X_tr, y_tr, X_ts, y_ts, X_vl, y_vl = training_img_aug(train, test, val)
-train_idx = train[0]
-test_idx = test[0]
-val_idx = val[0]
-
-plot_image_sets(X_tr, y_tr, X_vl, y_vl)
+    plot_image_sets(X_tr, y_tr, X_vl, y_vl)

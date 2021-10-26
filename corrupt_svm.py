@@ -10,10 +10,12 @@ import os
 import sys
 import argparse
 import shutil
+import subprocess
 import glob
 import numpy as np
 from astropy.io import fits
-import subprocess
+from drizzlepac.haputils import diagnostic_json_harvester as djh
+
 from make_images import generate_total_images, draw_filter_images
 
 SVM_QUALITY_TESTING="on"
@@ -252,52 +254,59 @@ def run_svm(dataset):
         os.chdir(cwd)
 
 
-# def get_files_for_image_gen(dataset):
-#     mutations = glob.glob(f"{dataset}_*")
-#     corr_folder = f"./{dataset}_corrs"
-#     for m in mutations:
-#         fits_file = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
-#         p_cat = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
-#         s_cat = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
-#         g_cat = glob.glob(f"{m}/*GAIA*.ecsv")[0]
-#         D = [
-#             f"{corr_folder}/{m}/fits", 
-#             f"{corr_folder}/{m}/cat/gaia", 
-#             f"{corr_folder}/{m}/cat/point", 
-#             f"{corr_folder}/{m}/cat/segment"
-#             ]
-#         for d in D:
-#             os.makedirs(d, exist_ok=True)
-#         shutil.copy(fits_file, f"{D[0]}/"+os.path.basename(fits_file))
-#         shutil.copy(g_cat, f"{D[1]}/"+os.path.basename(g_cat))
-#         shutil.copy(p_cat, f"{D[2]}/"+os.path.basename(p_cat))
-#         shutil.copy(s_cat, f"{D[3]}/"+os.path.basename(s_cat))
-#     return corr_folder
+def rename_copy_files(dataset, m, f_dir, g_dir, p_dir, s_dir):
+    mm = '_'.join(m.split('_')[1:])
+    f1 = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")
+    p1 = glob.glob(f"{m}/*total*point-cat.ecsv")
+    s1 = glob.glob(f"{m}/*total*segment-cat.ecsv")
+    g1 = glob.glob(f"{m}/*GAIA*.ecsv")
+    file_pairs = dict(f_dir=f1, g_dir=g1, p_dir=p1, s_dir=s1)
+    missing = []
+    for k, v in file_pairs.items():
+        if len(v) > 0:
+            v = v[0]
+            v2 = f"{k}/hst_{mm}_{'_'.join(os.path.basename(v).split('_')[4:])}"
+            shutil.copy(v, v2)
+        else:
+            missing.append((m, k))
+    print(missing)
+    return file_pairs
 
 
 def get_total_image_gen_files(dataset):
-    c_dir = f"./{dataset}_total"
+    #TODO: check for existing paths first, handle exceptions
+    mutations = glob.glob(f"{dataset}_*")
+    c_dir = f"./total_corrs"
     f_dir, g_dir = f"{c_dir}/fits", f"{c_dir}/cat/gaia"
     p_dir, s_dir, = f"{c_dir}/cat/point", f"{c_dir}/cat/segment"
     for d in [c_dir, f_dir, g_dir, p_dir, s_dir]:
         os.makedirs(d, exist_ok=True)
-    mutations = glob.glob(f"{dataset}_*")
+    
     for m in mutations:
-        # copy and rename relevant fits and catalog files 
-        # hst + f475w_clear2l_all_stat + wfc_total_j6m903_drc.fits
+        # copy and rename relevant fits and catalog files
         mm = '_'.join(m.split('_')[1:])
-        f1 = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
-        f2 = f"{f_dir}/hst_{mm}_{'_'.join(os.path.basename(f1).split('_')[4:])}"
-        shutil.copy(f1, f2)
-        g1 = glob.glob(f"{m}/*GAIA*.ecsv")[0]
-        g2 = f"{g_dir}/hst_{mm}_{'_'.join(os.path.basename(g1).split('_')[4:])}"
-        shutil.copy(g1, g2)
-        p1 = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
-        p2 = f"{p_dir}/hst_{mm}_{'_'.join(os.path.basename(p1).split('_')[4:])}"
-        shutil.copy(p1, p2)
-        s1 = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
-        s2 = f"{s_dir}/hst_{mm}_{'_'.join(os.path.basename(s1).split('_')[4:])}"
-        shutil.copy(s1, s2)
+        try:
+            f1 = glob.glob(f"{m}/hst_*_total_{dataset}_dr?.fits")[0]
+            p1 = glob.glob(f"{m}/*total*point-cat.ecsv")[0]
+            s1 = glob.glob(f"{m}/*total*segment-cat.ecsv")[0]
+            g1 = glob.glob(f"{m}/*GAIA*.ecsv")[0]
+            f2 = f"{f_dir}/hst_{mm}_{'_'.join(os.path.basename(f1).split('_')[4:])}"
+            p2 = f"{p_dir}/hst_{mm}_{'_'.join(os.path.basename(p1).split('_')[4:])}"
+            s2 = f"{s_dir}/hst_{mm}_{'_'.join(os.path.basename(s1).split('_')[4:])}"
+            g2 = f"{g_dir}/hst_{mm}_{'_'.join(os.path.basename(g1).split('_')[4:])}"
+            files = [(f1, f2), (g1, g2), (p1, p2), (s1, s2)]
+            for (a, b) in files:
+                if os.path.exists(a):
+                    shutil.copy(a, b)
+                else:
+                    print(f"Couldn't find source file {a}")
+        except IndexError as e:
+            print(m, e)
+    # for root, _, f in os.walk(c_dir):
+    #     indent = "    " * root.count(os.sep)
+    #     print("{}{}/".format(indent, os.path.basename(root)))
+    #     for filename in f:
+    #         print("{}{}".format(indent + "    ", filename))
     return c_dir
 
 def get_filter_image_gen_files(dataset):
@@ -336,9 +345,18 @@ def generate_images(dataset, filters=False):
     #         print(f"Image Generator error for {m}")
 
 
-
-#TODO: drizzlepac h5 file creator from json files
-# def make_h5_file():
+def make_h5_file(svm_data):
+    os.chdir(svm_data)
+    djh.json_harvester(
+        json_search_path='./', 
+        json_patterns=['*_svm_*.json'], 
+        output_filename_basename='ml_train_dataframe'
+        )
+# def make_h5_file(dataset):
+#     """
+#     creates h5 file from SVM-generated json QA files
+#     """
+#     for visit in os.listdir(dataset):
 #     mutations = glob.glob(f"{dataset}_*")
 #     for m in mutations:
 #         pass
