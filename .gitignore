@@ -1,5 +1,13 @@
+# TEMP
+scripts/*
+Dockerfile
+setup.cfg
+tls*
+
 # data and image files (too large - need to reduce to sample set)
-*data
+*.h5
+*training_2021-07-28
+
 
 # Compiled files
 *.py[cod]
