@@ -54,6 +54,17 @@ def proc_time(start, end):
     print(f"Process took {t}\n")
 
 
+def print_timestamp(ts, name, value):
+    if value == 0:
+        info = "STARTED"
+    elif value == 1:
+        info = "FINISHED"
+    else:
+        info = ""
+    timestring = dt.datetime.fromtimestamp(ts).strftime("%m/%d/%Y - %H:%M:%S")
+    print(f"{info} [{name}]: {timestring}")
+
+
 class Builder:
     def __init__(self, X_train, y_train, X_test, y_test, batch_size=32, epochs=60, 
                  lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=2, 

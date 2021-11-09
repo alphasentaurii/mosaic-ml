@@ -1,6 +1,7 @@
 # TEMP
-scripts/*
-Dockerfile
+scripts/crds_s3_get
+scripts/install-fitscut
+
 setup.cfg
 tls*
 
@@ -27,7 +28,7 @@ htmlcov
 .coverage
 MANIFEST
 .ipynb_checkpoints
-
+.bashrc
 # Sphinx
 docs/api
 docs/_build
@@ -77,3 +78,6 @@ crds_cache
 .python_history
 
 .eggs
+
+.teal
+.config
