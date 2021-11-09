@@ -1,6 +1,5 @@
 # TEMP
-scripts/crds_s3_get
-scripts/install-fitscut
+scripts/*
 
 setup.cfg
 tls*

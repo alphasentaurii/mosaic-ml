@@ -59,10 +59,10 @@ RUN yum remove -y kernel-devel   &&\
 WORKDIR /home/developer
 RUN mkdir /home/developer/mosaic-ml
 ADD mosaic-ml/ /home/developer/mosaic-ml/
-RUN chown -R developer.developer /home/developer
+RUN chown -R developer:developer /home/developer
 
-COPY requirements.txt ./home/developer/
-RUN python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+COPY requirements.txt /home/developer/.
+RUN python -m pip install --upgrade pip && python -m pip install -r /home/developer/requirements.txt
 
 
 
