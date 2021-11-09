@@ -17,9 +17,9 @@ SHAPE = (DIM, SIZE, SIZE, CH)
 """***REGRESSION TEST DATA AUGMENTATION FOR MLP***"""
 
 
-def apply_power_transform(data, cols=['n_exposures', 'rms_ra', 'rms_dec', 
+def apply_power_transform(data, cols=['numexp', 'rms_ra', 'rms_dec', 
                                       'nmatches', 'point', 'segment', 
-                                      'gaia_sources']):
+                                      'gaia']):
     data_cont = data[cols]
     idx = data_cont.index
     pt = PowerTransformer(standardize=False)

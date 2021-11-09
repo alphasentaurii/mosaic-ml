@@ -7,9 +7,8 @@ from astroquery.mast import Observations
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from stsci.tools import logutil
-import progressbar
 from progressbar import ProgressBar
-import data_harvest as djh
+import harvest as djh
 
 __taskname__ = 'mosaic_ml_data_import'
 
@@ -57,8 +56,8 @@ def split_index(df):
         items = n.split('_')
         idx_dct[n] = {}
         idx_dct[n]['detector'] = items[4]
-        if len(items) > 6:
-            idx_dct[n]['dataset'] = items[6] + '_' + items[7]
+        if len(items) > 7:
+            idx_dct[n]['dataset'] = '_'.join(items[6:])
             # idx_dct[n]['dataset'] = items[6][:6] + '_' + items[7]
         else:
             idx_dct[n]['dataset'] = items[6]
@@ -201,17 +200,44 @@ def encode_features(df, encodings):
     return df
 
 
-def main(hdf5_file, output_file, data_path, make, crpt):
-    if make:
-        hdf5_file = make_h5_file(data_path, hdf5_file=hdf5_file, crpt=crpt)
-    data = load_h5_file(hdf5_file)
+def find_subsamples(df, output_file):
+    if 'label' not in df.columns:
+        return
+    df = df.loc[df['label'] == 0]
+    subsamples = {}
+    categories = list(df['cat'].unique())
+    detectors = list(df['det'].unique())
+    for d in detectors:
+        det = df.loc[df['det'] == d]
+        for c in categories:
+            cat = det.loc[det['cat'] == c]
+            if len(cat) > 0:
+                idx = np.random.randint(0, len(cat))
+                subsamples[f'{c}_{d}'] = cat.iloc[idx].index.values
+            else:
+                continue
+    index = list(subsamples.values())
+    datasets = []
+    for i in index:
+        dataset = i.split('_')[-2]
+        datasets.append(dataset)
+    output_path = os.path.dirname(output_file)
+    with open(f'{output_path}/subsamples.txt', 'w') as f:
+        for d in datasets:
+            f.writelines(f"{d}\n")
+
+
+def build_raw(data, data_path, output_path, outfile):
     df = extract_columns(data)
     df = extract_alignment_data(df, data_path)
     df = find_category(df)
     # save raw_data before preprocessing
     df['index'] = df.index
-    df.to_csv(f'raw-{output_file}.csv', index=False)
+    df.to_csv(f'{output_path}/raw-{outfile}.csv', index=False)
     df.set_index('index', inplace=True)
+    return df
+
+def encode_data(df, crpt):
     df = encode_categories(df)
     encodings = {'wcstype': 'wcs', 'cat': 'cat', 'detector': 'det'}
     df = encode_features(df, encodings)
@@ -222,20 +248,46 @@ def main(hdf5_file, output_file, data_path, make, crpt):
         labels = []
         for _ in range(len(df)):
             labels.append(1)
-        df['label'] = pd.Series(labels).values    
-    df['index'] = df.index
-    column_order = ['numexp', 'rms_ra', 'rms_dec', 'nmatches', 'point', 'segment', 'gaia', 'det', 'wcs', 'cat', 'label', 'index']
+        df['label'] = pd.Series(labels).values
+    else:
+        find_subsamples(df, output_file)
+    return df
+
+
+def set_columns(df, outpath):
+    column_order = ['numexp', 'rms_ra', 'rms_dec', 'nmatches', 'point', 'segment', 'gaia', 'det', 'wcs', 'cat']
+    if 'label' in df.columns:
+        column_order.append('label')
+        pos = list(df.loc[df['label'] == 1].index.values)
+        if len(pos) > 0:
+            with open(f'{outpath}/pos.txt', 'w') as f:
+                for i in pos:
+                    f.writelines(f"{i}\n")
     df = df[column_order]
+    return df
+
+
+def main(hdf5_file, output_file, data_path, make, crpt):
+    outpath = os.path.dirname(output_file)
+    outfile = os.path.basename(output_file)
+    os.makedirs(outpath, exist_ok=True)
+    if make:
+        hdf5_file = make_h5_file(data_path, hdf5_file=hdf5_file, crpt=crpt)
+    data = load_h5_file(hdf5_file)
+    df = build_raw(data, outpath, outfile)
+    df = encode_data(df, crpt)
+    df = set_columns(df, outpath)
+    df['index'] = df.index
     df.to_csv(output_file, index=False)
     print(f"Dataframe saved to CSV: {output_file}")
     return df
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog="Mosaic ML Data Import", usage="python data_import.py ml_train -d=singlevisits -o=svm.csv")
+    parser = argparse.ArgumentParser(prog="Mosaic ML Data Import", usage="python make_dataset.py ml_train -d=singlevisits -o=svm.csv")
     parser.add_argument("hdf5", type=str, default='ml_train_dataframe', help="hdf5 filepath")
-    parser.add_argument("-d", "--datapath", type=str, default="./data", help="svm datasets directory path")
-    parser.add_argument("-o","--output", type=str, default="./svm_data.csv", help="csv output filepath")
+    parser.add_argument("-d", "--datapath", type=str, default="./data/singlevisits", help="svm datasets directory path")
+    parser.add_argument("-o","--output", type=str, default="./data/svm_data.csv", help="csv output filepath")
     parser.add_argument("-m","--make", type=str, default=1, help="make hdf5 file from json files")
     parser.add_argument("-l", "--loglevel", type=str, default="info", help="set log level")
     parser.add_argument("-c", "--crpt", type=int, default=0, choices=[0,1], help="set to 1 for corruption data")
@@ -246,5 +298,6 @@ if __name__ == '__main__':
     log_level=log_dict[args.loglevel]
     log.setLevel(log_level)
     main(hdf5_file, output_file, data_path, args.make, args.crpt)
+    
 
     

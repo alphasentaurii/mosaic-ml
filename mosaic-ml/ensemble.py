@@ -2,19 +2,9 @@
 import os
 import pandas as pd
 import numpy as np
-import zipfile
-import pickle
 import os
-from sklearn.model_selection import train_test_split
 import tensorflow as tf
-from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam
-from sklearn.neural_network import BernoulliRBM
-from sklearn.pipeline import Pipeline
-from imageio import imread
-from IPython import display
-from skimage.transform import resize
-from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-bright')
@@ -23,48 +13,28 @@ mpl.rc('font',**font_dict)
 #ignore pink warnings
 import warnings
 warnings.filterwarnings('ignore')
-
 import plotly.graph_objects as go
-import plotly.express as px
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, Dropout, Flatten, \
-BatchNormalization, Input, concatenate, Activation
-from keras.layers import Conv2D
-from keras.layers import MaxPooling2D
-from keras.layers import Flatten
+from tensorflow.keras import layers, optimizers, callbacks
+from tensorflow.keras.layers import Dense, Input, concatenate
 from keras.layers import Dense
-from scipy.ndimage import convolve
-from sklearn.model_selection import train_test_split
-from keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import (
     roc_curve, 
     roc_auc_score, 
-    accuracy_score, 
     precision_recall_curve, 
     average_precision_score,
-    f1_score,
     classification_report,
     confusion_matrix
     )
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier, KerasRegressor
-from sklearn.model_selection import StratifiedKFold, KFold, cross_val_score
-from sklearn.preprocessing import LabelEncoder, PowerTransformer
-from sklearn.model_selection import GridSearchCV
-from tensorflow.keras import layers
-from tensorflow.keras import Input, Model
-from tensorflow.keras import optimizers
-from tensorflow.keras import callbacks
 import time
 import datetime as dt
-
-from data_augment import apply_power_transform, training_data_aug, augment_data
-from prep_images import make_image_sets, training_img_aug, augment_image
+from augment import augment_data, augment_image
 
 HOME = os.path.abspath(os.curdir)
-DATA = os.path.join(HOME, 'data')
-SUBFOLDER =  os.path.join(DATA, '2021-07-28')
-IMG_DIR = os.path.join(SUBFOLDER, 'images')
-TRAIN_PATH = f"{IMG_DIR}/training"
+# DATA = os.path.join(HOME, 'data')
+# SUBFOLDER =  os.path.join(DATA, '2021-07-28')
+# IMG_DIR = os.path.join(SUBFOLDER, 'images')
+# TRAIN_PATH = f"{IMG_DIR}/training"
 
 DIM = 3
 CH = 3
@@ -82,61 +52,6 @@ def proc_time(start, end):
     else:
         t = f"{duration} seconds."
     print(f"Process took {t}\n")
-
-def save_model(model, name="mlp", weights=True):
-    """The model architecture, and training configuration (including the optimizer, losses, and metrics)
-    are stored in saved_model.pb. The weights are saved in the variables/ directory."""
-    model_path = os.path.join(f"{HOME}/models", name)
-    weights_path = f"{model_path}/weights/ckpt"
-    model.save(model_path)
-    if weights is True:
-        model.save_weights(weights_path)
-    for root, _, files in os.walk(model_path):
-        indent = "    " * root.count(os.sep)
-        print("{}{}/".format(indent, os.path.basename(root)))
-        for filename in files:
-            print("{}{}".format(indent + "    ", filename))
-
-def save_to_pickle(data_dict, res_path=f'{HOME}/results/mlp'):
-    keys = []
-    for k, v in data_dict.items():
-        if res_path is not None:
-            os.makedirs(f"{res_path}", exist_ok=True)
-            key = f"{res_path}/{k}"
-        else:
-            key = k
-        with open(key, "wb") as file_pi:
-            pickle.dump(v, file_pi)
-            print(f"{k} saved to: {key}")
-            keys.append(key)
-    print(f"File keys:\n {keys}")
-    return keys
-
-def make_tensors(X_train, y_train, X_test, y_test):
-    """Convert Arrays to Tensors"""
-    X_train = tf.convert_to_tensor(X_train, dtype=tf.float32)
-    y_train = tf.convert_to_tensor(y_train, dtype=tf.float32)
-    X_test = tf.convert_to_tensor(X_test, dtype=tf.float32)
-    y_test = tf.convert_to_tensor(y_test, dtype=tf.float32)
-    return X_train, y_train, X_test, y_test
-
-def make_arrays(X_train, y_train, X_test, y_test):
-    X_train = X_train.values
-    y_train = y_train.values.reshape(-1,1)
-    X_test = X_test.values
-    y_test = y_test.values.reshape(-1,1)
-    return X_train, y_train, X_test, y_test
-
-
-def make_ensembles(train_img, test_img, val_img, train_data, test_data, val_data,
-                   y_train, y_test, y_val):
-    XTR = [train_data, train_img]
-    XTS = [test_data, test_img]
-    XVL = [val_data, val_img]
-    YTR = y_train.reshape(-1, 1)
-    YTS = y_test.reshape(-1, 1)
-    YVL = y_val.reshape(-1, 1)
-    return XTR, YTR, XTS, YTS, XVL, YVL
 
 
 class Builder:
@@ -189,7 +104,7 @@ class Builder:
     def build_mlp(self, input_shape=None, lr_sched=True, layers=[18, 32, 64, 32, 18]):
         if input_shape is None:
             input_shape = self.X_train.shape[1]
-        model = Sequential()
+        self.model = Sequential()
         # visible layer
         inputs = Input(shape=(input_shape,), name="svm_inputs")
         # hidden layers
@@ -440,14 +355,14 @@ class Compute(Builder):
         self.fnfp = None
         self.results = None
     
-    def keras_history(self, figsize=(10,4)):
+    def keras_history(self, figsize=(10,4)): #(15,6)
         """
         side by side sublots of training val accuracy and loss (left and right respectively)
         """
         
         import matplotlib.pyplot as plt
         
-        fig, axes =plt.subplots(ncols=2,figsize=(15,6))
+        fig, axes =plt.subplots(ncols=2,figsize=figsize)
         axes = axes.flatten()
 
         ax = axes[0]
@@ -467,8 +382,7 @@ class Compute(Builder):
         ax.legend(['Train', 'Test'], loc='upper left')
         fig.show()
 
-    def fusion_matrix(self, matrix, classes=['aligned', 'misaligned'], normalize=True, title='Confusion Matrix', cmap='Blues',
-        print_raw=False): 
+    def fusion_matrix(self, matrix, classes=['aligned', 'misaligned'], normalize=True, title='Confusion Matrix', cmap='Blues', print_raw=False): 
         """
         FUSION MATRIX!
         -------------
@@ -660,9 +574,6 @@ class Compute(Builder):
             fig.show()
         return fig
 
-
-
-
     def keras_acc_plot(self, acc_train, acc_test):
         n_epochs = list(range(len(acc_train)))
         data = [
@@ -689,7 +600,6 @@ class Compute(Builder):
         fig = go.Figure(data=data, layout=layout)
         return fig
 
-
     def keras_loss_plot(self, loss_train, loss_test):
         n_epochs = list(range(len(loss_train)))
         data = [
@@ -712,7 +622,6 @@ class Compute(Builder):
         )
         fig = go.Figure(data=data, layout=layout)
         return fig
-
 
     def keras_plots(self, show=True):
         acc_train, acc_test = self.history["accuracy"], self.history["val_accuracy"]
@@ -741,7 +650,6 @@ class Compute(Builder):
             "keras_acc": keras_acc, "keras_loss": keras_loss, 
             "roc_fig": roc_fig, "pr_fig": pr_fig, "cm": cm}
         return self.plots
-
 
     def compute_scores(self):
         report = classification_report(self.y_test, self.y_pred, labels=[0,1], 

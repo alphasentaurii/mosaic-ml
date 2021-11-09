@@ -95,7 +95,7 @@ def get_json_files(search_path=os.getcwd(),
             dataframe_idx = json_data['general information']['dataframe_index']
             """***ADAPTED FOR MACHINE LEARNING ARTIFICIAL CORRUPTION FILES***"""
             if crpt == 1:
-                mm = '-'.join(os.path.dirname(json_filename).split('_')[1:])
+                mm = '_'.join(os.path.dirname(json_filename).split('_')[1:])
                 idx = f"{dataframe_idx}_{mm}"
             else:
                 idx = dataframe_idx

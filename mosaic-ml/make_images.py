@@ -61,8 +61,10 @@ def create_image_name(hfile, dataset, P, S, G, crpt, out):
         catstr = ''
     name = os.path.basename(hfile).split('.')[0][:-4]
     if crpt:
-        pfx, sfx = '_'.join(dataset.split('_')[1:]), '_'.join(name.split('_')[4:])
-        name = f"hst_{pfx}_{sfx}"
+        sfx = '_'.join(dataset.split('_')[1:])
+        name = f"{name}_{sfx}"
+        # pfx, sfx = '_'.join(dataset.split('_')[1:]), '_'.join(name.split('_')[4:])
+        # name = f"hst_{pfx}_{sfx}"
     outpath = f'{out}/{name}'
     os.makedirs(outpath, exist_ok=True)
     imgpath = os.path.join(outpath, f'{name}{catstr}')
@@ -106,79 +108,82 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
     """
     # allows for corruption subdir names e.g. ia0m04_f110w_all_stat vs ia0m04
     subdir, dname = f"{input_path}/{dataset}", dataset.split('_')[0] 
-    try:
-        hfile = glob.glob(f"{subdir}/*total_{dname}_dr?.fits")[0]
-    except IndexError as e:
+    hfiles = glob.glob(f"{subdir}/*total_{dname}_dr?.fits")
+    if len(hfiles) > 0:
+        for hfile in hfiles:
+            name = os.path.basename(hfile).split('.')[0][:-4]
+            detector = name.split('_')[4]
+            ras, decs = np.ndarray((0,)), np.ndarray((0,))
+            with fits.open(hfile) as ff:
+                hdu = ff[1]
+                wcs = WCS(hdu.header)
+                footprint = wcs.calc_footprint(hdu.header)
+                ras = np.append(ras, footprint[:, 0])
+                decs = np.append(decs, footprint[:, 1])
+                ralim = [np.max(ras), np.min(ras)]
+                declim = [np.max(decs), np.min(decs)]
+                radeclim = np.stack([ralim, declim], axis=1)
+                fig = plt.figure(figsize=figsize)
+                ax = fig.add_subplot(111, projection=wcs, frameon=False)
+                plt.axis(False)
+                interval = ZScaleInterval()
+                _, vmax = interval.get_limits(hdu.data)
+                norm = ImageNormalize(hdu.data, vmin=0, vmax=vmax*2,
+                                        clip=True)
+                ax.imshow(hdu.data, origin='lower', norm=norm, cmap='gray')
+
+            if P:
+                p_cat = glob.glob(f"{subdir}/{name}_point-cat.ecsv")
+                if len(p_cat) > 0:
+                    point, pfcolor_, pfcolor = draw_catalogs(p_cat[0], 'point')
+                    if pfcolor_ is not None:
+                        for fcol in pfcolor_.unique():
+                            if fcol is not None:
+                                q = pfcolor == fcol[0]
+                                ax.scatter(point[q]['RA'], point[q]['DEC'],
+                                            edgecolor=fcol[0], facecolor='none',
+                                            transform=ax.get_transform('fk5'),
+                                            marker='o', s=15, alpha=0.5)
+                else:
+                    print("Point cat not found: ", dataset)
+
+            if S:
+                s_cat = glob.glob(f"{subdir}/{name}_segment-cat.ecsv")
+                if len(s_cat) > 0:
+                    seg, sfcolor_, sfcolor = draw_catalogs(s_cat[0], 'segment')
+                    if sfcolor_ is not None:
+                        for fcol in sfcolor_.unique():
+                            if fcol is not None:
+                                q = sfcolor == fcol[0]
+                                ax.scatter(seg[q]['RA'], seg[q]['DEC'],
+                                        edgecolor=fcol[0], facecolor='none',
+                                        transform=ax.get_transform('fk5'),
+                                        marker='o', s=15, alpha=0.5)
+                else:
+                    print("Segment cat not found: ", dataset)
+            
+            if G:
+                g_cat = glob.glob(f"{subdir}/*_{detector}_*GAIAeDR3_ref_cat.ecsv")
+                if len(g_cat) > 0:
+                    if os.path.exists(g_cat[0]):
+                        gaia = ascii.read(g_cat[0]).to_pandas()
+                        ax.scatter(gaia['RA'], gaia['DEC'],
+                        edgecolor='cyan', facecolor='none',
+                        transform=ax.get_transform('fk5'),
+                        marker='o', s=15)
+                else:
+                    print("GAIA cat not found: ", dataset)
+
+            xlim, ylim = wcs.wcs_world2pix(radeclim, 1).T
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+            imgpath = create_image_name(hfile, dataset, P, S, G, crpt, out)
+            plt.savefig(imgpath, bbox_inches='tight')
+            plt.close(fig)
+            print(f"\t{imgpath}.png")
+    else:
         print(f"{dataset} fits file could not be found")
         return
-    ras, decs = np.ndarray((0,)), np.ndarray((0,))
-    with fits.open(hfile) as ff:
-        hdu = ff[1]
-        wcs = WCS(hdu.header)
-        footprint = wcs.calc_footprint(hdu.header)
-        ras = np.append(ras, footprint[:, 0])
-        decs = np.append(decs, footprint[:, 1])
-        ralim = [np.max(ras), np.min(ras)]
-        declim = [np.max(decs), np.min(decs)]
-        radeclim = np.stack([ralim, declim], axis=1)
-        fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111, projection=wcs, frameon=False)
-        plt.axis(False)
-        interval = ZScaleInterval()
-        _, vmax = interval.get_limits(hdu.data)
-        norm = ImageNormalize(hdu.data, vmin=0, vmax=vmax*2,
-                                clip=True)
-        ax.imshow(hdu.data, origin='lower', norm=norm, cmap='gray')
-
-    if P:
-        p_cat = glob.glob(f"{subdir}/*total*point-cat.ecsv")
-        if len(p_cat) > 0:
-            point, pfcolor_, pfcolor = draw_catalogs(p_cat[0], 'point')
-            if pfcolor_ is not None:
-                for fcol in pfcolor_.unique():
-                    if fcol is not None:
-                        q = pfcolor == fcol[0]
-                        ax.scatter(point[q]['RA'], point[q]['DEC'],
-                                    edgecolor=fcol[0], facecolor='none',
-                                    transform=ax.get_transform('fk5'),
-                                    marker='o', s=15, alpha=0.5)
-        else:
-            print("Point cat not found: ", dataset)
-
-    if S:
-        s_cat = glob.glob(f"{subdir}/*total*segment-cat.ecsv")
-        if len(s_cat) > 0:
-            seg, sfcolor_, sfcolor = draw_catalogs(s_cat[0], 'segment')
-            if sfcolor_ is not None:
-                for fcol in sfcolor_.unique():
-                    if fcol is not None:
-                        q = sfcolor == fcol[0]
-                        ax.scatter(seg[q]['RA'], seg[q]['DEC'],
-                                edgecolor=fcol[0], facecolor='none',
-                                transform=ax.get_transform('fk5'),
-                                marker='o', s=15, alpha=0.5)
-        else:
-            print("Segment cat not found: ", dataset)
-    
-    if G:
-        g_cat = glob.glob(f"{subdir}/*_metawcs_all_GAIAeDR3_ref_cat.ecsv")
-        if len(g_cat) > 0:
-            if os.path.exists(g_cat[0]):
-                gaia = ascii.read(g_cat[0]).to_pandas()
-                ax.scatter(gaia['RA'], gaia['DEC'],
-                edgecolor='cyan', facecolor='none',
-                transform=ax.get_transform('fk5'),
-                marker='o', s=15)
-        else:
-            print("GAIA cat not found: ", dataset)
-
-    xlim, ylim = wcs.wcs_world2pix(radeclim, 1).T
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    imgpath = create_image_name(hfile, dataset, P, S, G, crpt, out)
-    plt.savefig(imgpath, bbox_inches='tight')
-    plt.close(fig)
-    print(f"\t{imgpath}.png")
 
 
 def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24,24), crpt=0, gen=3):

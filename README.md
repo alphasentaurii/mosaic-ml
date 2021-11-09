@@ -18,7 +18,7 @@ Import, preprocess and (optionally) augment the SVM regression test data and ima
 
 ```bash
 $ mkdir ml_data
-$ python data_import.py ml_train -d=singlevisits -o=ml_data/svm_training.csv
+$ python make_dataset.py ml_train -d=singlevisits -o=ml_data/svm_training.csv
 ```
 
 2. Create total detection and filter images
@@ -59,7 +59,7 @@ Randomly add noise to continuous variables (MLP data):
 - add or subtract calculated logistic value
 
 ```bash
-$ python -m training.py ml_data/svm_training.csv
+$ python training.py ml_data/svm_training.csv
 ```
 
 ## Inference
