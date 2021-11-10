@@ -2,26 +2,29 @@
 export SVM_QUALITY_TESTING=on
 
 SRCPATH=${1:-"."} # data/training_2021-07-28/singlevisits
-DATASETS=${2:-""} # ('icon04')
-
+OUT=${2:-"./data"} #OUT=`echo $SRCPATH | cut -d'/' -f1` # ./data
+DATASETS=${3:-""} # ('icon04')
+REG=${reg:-"1"}
 EXP=${expo:-""}
 MODE=${mode:-""}
 CRPT=${crpt:-""}
-REG=${reg:-""}
 FILTERS=${filters:-""}
 
 if [[ -z ${DATASETS} ]]; then
     DATASETS=`ls "${SRCPATH}"`
 fi
 
-OUT=`echo $SRCPATH | cut -d'/' -f1`
-NEG=${OUT}/img/total/0
-POS=${OUT}/img/total/1
+IMG_DET=${OUT}/img/total
+NEG=${IMG_DET}/0
+POS=${IMG_DET}/1
 mkdirs -p NEG POS
 
-if [[ ${REG} -ne "" ]]; then
+h5file=train_mosaic_data
+training_data=${OUT}/train_mosaic.csv
+
+if [[ ${REG} != "0" ]]; then
     # REGULAR DATASET
-    python make_dataset.py train_mosaic_data -d=$SRCPATH -o=${OUT}/train_mosaic.csv
+    python make_dataset.py $h5file -d=$SRCPATH -o=$training_data
     python make_images.py $SRCPATH -o=${NEG}
 fi
 
@@ -39,7 +42,7 @@ if [[ ${CRPT} -ne "" ]]; then
 
     for dataset in "${DATASETS[@]}"
     do
-        if [[ ${EXP} && ${MODE} -ne "" ]]; then
+        if [[ ${EXP} != "" && ${MODE} != "" ]]; then
             python corrupt.py ${dataset} mfi -e=${EXP} -m=${MODE}
         else
             python corrupt.py ${dataset} mfi
@@ -59,16 +62,23 @@ if [[ ${CRPT} -ne "" ]]; then
         done
     done
 
+    crpt_training=${OUT}/svm_crpt.csv 
+
     python make_images.py $SVMCRPT -o=$POS -c=1
-    python make_dataset.py $SVMCRPT -o=${OUT}/svm_crpt.csv -c=1
+    python make_dataset.py $SVMCRPT -o=$crpt_training -c=1
+    python mosaic_train.py $training_data $IMG_DET -c=$crpt_training
+else
+    python mosaic_train.py $training_data $IMG_DET
 fi
+
+
 
 # Only if using filter similarity embeddings
 if [[ ${FILTERS} -ne "" ]]; then
-    FLTR=${OUT}/img/filter
-    mkdir $FLTR
+    IMG_FLTR=${OUT}/img/total
+    mkdir $IMG_FLTR
     python make_images.py $SVMCRPT -o=$FLTR -c=1 -t=filter
     python make_images.py $SVMCRPT -o=./img/filter -c=1 -t=filter
 fi
 
-python mosaic_train.py data/svm_data.csv data/training/img/total/ -c=data/svm-crpt.csv
+

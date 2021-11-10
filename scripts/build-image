@@ -1,9 +1,0 @@
-#! /bin/bash -eu
-
-export SVM_QUALITY_TESTING=on
-export MOSAICML_IMAGE_REPO=alphasentaurii/mosaic-ml
-export MOSAICML_IMAGE_TAG=latest 
-export MOSAICML_DOCKER_IMAGE=${MOSAICML_IMAGE_REPO}:${MOSAICML_IMAGE_TAG}
-export CAL_BASE_IMAGE="stsci/hst-pipeline:CALDP_drizzlecats_CAL_rc5"
-docker build -f Dockerfile -t ${MOSAICML_DOCKER_IMAGE} --build-arg CAL_BASE_IMAGE="${CAL_BASE_IMAGE}" .
-docker push ${MOSAICML_DOCKER_IMAGE}

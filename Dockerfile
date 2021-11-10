@@ -47,8 +47,5 @@ RUN python -m pip install --upgrade pip && python -m pip install -r /home/develo
 # ------------------------------------------------
 USER developer
 ENV SVM_QUALITY_TESTING=on
-#RUN conda init bash && source ~/.bashrc
-#RUN cd mosaic-ml  &&  pip install .
-
 CMD ["/bin/bash"]
 
