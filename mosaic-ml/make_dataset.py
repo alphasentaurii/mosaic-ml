@@ -227,13 +227,13 @@ def find_subsamples(df, output_file):
             f.writelines(f"{d}\n")
 
 
-def build_raw(data, data_path, output_path, outfile):
+def build_raw(data, data_path, outpath, outfile):
     df = extract_columns(data)
     df = extract_alignment_data(df, data_path)
     df = find_category(df)
     # save raw_data before preprocessing
     df['index'] = df.index
-    df.to_csv(f'{output_path}/raw-{outfile}.csv', index=False)
+    df.to_csv(f'{outpath}/raw-{outfile}.csv', index=False)
     df.set_index('index', inplace=True)
     return df
 
@@ -274,7 +274,7 @@ def main(hdf5_file, output_file, data_path, make, crpt):
     if make:
         hdf5_file = make_h5_file(data_path, hdf5_file=hdf5_file, crpt=crpt)
     data = load_h5_file(hdf5_file)
-    df = build_raw(data, outpath, outfile)
+    df = build_raw(data, data_path, outpath, outfile)
     df = encode_data(df, crpt)
     df = set_columns(df, outpath)
     df['index'] = df.index

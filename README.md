@@ -39,7 +39,7 @@ $ docker run -it alphasentaurii/mosaic-ml:latest --env $MOUNTS
 
 ----
 
-# Run 
+# Run Mosaic-ML
 
 The Mosaic-ML package has 3 primary functions:
 
