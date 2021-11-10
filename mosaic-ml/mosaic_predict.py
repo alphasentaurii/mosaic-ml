@@ -4,7 +4,6 @@ import pandas as pd
 import argparse
 import sys
 
-
 from load_images import detector_prediction_images
 
 DIM = 3
