@@ -1,10 +1,5 @@
-# TEMP
-scripts/*
-
-setup.cfg
-tls*
-
 # data and image files (too large - need to reduce to sample set)
+*2021*
 *.h5
 *training_2021-07-28
 
