@@ -4,6 +4,16 @@ from keras.preprocessing import image
 from tqdm import tqdm
 
 def read_channels(channels, w, h, d, exp=None, color_mode='rgb'):
+    """Loads PNG image data and converts to 3D arrays.
+    **args
+    channels: tuple of image frames (original, source, gaia)
+    w: width
+    h: height
+    d: depth
+    **kwargs
+    exp: "expand" dimensions: (exp, w, h, 3). Set to 3 for predictions, None for training (default)
+
+    """
     t = (w, h)
     image_frames = [image.load_img(c, color_mode=color_mode, target_size=t) for c in channels]
     img = np.array([image.img_to_array(i) for i in image_frames])
@@ -12,6 +22,7 @@ def read_channels(channels, w, h, d, exp=None, color_mode='rgb'):
     else:
         img = img.reshape(exp, w, h, 3)
     return img
+
 
 def get_labeled_image_paths(i, img_path):
     neg = (
@@ -43,7 +54,7 @@ def detector_training_images(data, img_path, w, h, d, exp):
             idx.remove(i)
     img = []
     for ch1, ch2, ch3 in tqdm(files):
-        img.append(read_channels([ch1, ch2, ch3], w, h, d, exp))
+        img.append(read_channels([ch1, ch2, ch3], w, h, d, exp=exp))
     X, y = np.array(img, np.float32), np.array(labels)
     return (idx, X, y)
 
@@ -63,7 +74,6 @@ def detector_prediction_images(X, img_path, w, h, d, exp):
             idx.remove(i)
     img = []
     for ch1, ch2, ch3 in tqdm(image_files):
-        img.append(read_channels([ch1, ch2, ch3], w, h, d, exp))
+        img.append(read_channels([ch1, ch2, ch3], w, h, d, exp=exp))
     images = np.array(img, np.float32)
-
     return idx, images

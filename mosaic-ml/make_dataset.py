@@ -24,8 +24,9 @@ log_dict = {"critical": logutil.logging.CRITICAL,
             "info": logutil.logging.INFO,
             "debug": logutil.logging.DEBUG}
 
-def make_h5_file(data_path, patterns=['*_total*_svm_*.json'], hdf5_file='ml_train', crpt=0):
+def make_h5_file(data_path, outpath, patterns=['*_total*_svm_*.json'], hdf5_file='ml_train', crpt=0):
     print("*** Starting JSON Harvest ***")
+    hdf5_file = os.path.join(outpath, hdf5_file)
     djh.json_harvester(
         json_search_path=data_path,
         json_patterns=patterns,
@@ -280,14 +281,14 @@ def set_columns(df, outpath):
     return df
 
 
-def main(hdf5_file, output_file, data_path, make, crpt, log_level):
+def main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level):
     log.setLevel(log_level)
     outpath = os.path.dirname(output_file)
     outfile = os.path.basename(output_file)
     os.makedirs(outpath, exist_ok=True)
     if make:
-        hdf5_file = os.path.join(outpath, hdf5_file)
-        hdf5_file = make_h5_file(data_path, hdf5_file=hdf5_file, crpt=crpt)
+        patterns = pattern.split(",")
+        hdf5_file = make_h5_file(data_path, outpath, patterns, hdf5_file=hdf5_file, crpt=crpt)
     data = load_h5_file(hdf5_file)
     df = build_raw(data, data_path, outpath, outfile)
     df = encode_data(df, crpt)
@@ -301,17 +302,25 @@ def main(hdf5_file, output_file, data_path, make, crpt, log_level):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog="Mosaic ML Data Import", usage="python make_dataset.py ml_train -d=singlevisits -o=svm.csv")
     parser.add_argument("hdf5", type=str, default='ml_train_dataframe', help="hdf5 filepath")
-    parser.add_argument("-d", "--datapath", type=str, default="./data/singlevisits", help="svm datasets directory path")
-    parser.add_argument("-o","--output", type=str, default="./data/svm_data.csv", help="csv output filepath")
+    parser.add_argument("-d", "--datapath", type=str, default="./data/visits", help="svm datasets directory")
+    parser.add_argument("-o","--output_file", type=str, default="./data/svm.csv", help="csv output filepath")
+    parser.add_argument("-p", "--pattern", type=str, default="*_total*_svm_*.json")
     parser.add_argument("-m","--make", type=str, default=1, help="make hdf5 file from json files")
     parser.add_argument("-l", "--loglevel", type=str, default="info", help="set log level")
-    parser.add_argument("-c", "--crpt", type=int, default=0, choices=[0,1], help="set to 1 for corruption data")
+    parser.add_argument("-c", "--crpt", type=int, default=0, choices=[0,1], help="set to 1 if corruption data")
+    parser.add_argument("-s", "--single", type=str, default=None, help="single dataset, e.g. ia0m04")
+    
     args = parser.parse_args()
     hdf5_file = args.hdf5
     data_path = args.datapath
-    output_file = args.output
+    output_file = args.output_file
+    pattern = args.pattern
     log_level=log_dict[args.loglevel]
-    main(hdf5_file, output_file, data_path, args.make, args.crpt, log_level)
+    if args.single is None:
+        main(hdf5_file, data_path, output_file, pattern, args.make, args.crpt, log_level)
+    else:
+        single = args.single
+
     
 
     
