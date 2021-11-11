@@ -115,7 +115,7 @@ def main(model_path, data_file, img_path, output_file):
     X_data, X_img = load_mixed_inputs(data_file, img_path)
     X = make_ensemble_data(X_data, X_img)
     y_pred, y_proba = classify_alignments(ens_clf, X)
-    save_preds(X, y_pred, y_proba, output_file)
+    save_preds(X_data, y_pred, y_proba, output_file)
 
 
 if __name__ == '__main__':

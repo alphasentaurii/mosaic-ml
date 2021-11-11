@@ -1,7 +1,7 @@
 # astropy==4.3.1
 # drizzlepac==3.3.0
 tensorflow==2.6.2
-numpy==1.21.4
+# numpy==1.21.4
 progressbar==2.5
 tqdm==4.62.3
 tables==3.6.1

@@ -10,7 +10,6 @@ LABEL maintainer="dmd_octarine@stsci.edu" \
 # Environment variables
 ENV MKL_THREADING_LAYER="GNU"
 
-
 USER root
 
 RUN yum remove -y kernel-devel   &&\
@@ -41,11 +40,10 @@ ADD mosaic-ml/ /home/developer/mosaic-ml/
 RUN chown -R developer:developer /home/developer
 
 COPY requirements.txt /home/developer/.
-RUN python -m pip install --upgrade pip && python -m pip install -r /home/developer/requirements.txt
-
-
+RUN pip install --upgrade pip && pip install -r /home/developer/requirements.txt
+RUN pip install numpy~=1.21
 # ------------------------------------------------
 USER developer
 ENV SVM_QUALITY_TESTING=on
+RUN conda init bash && source ~/.bashrc && conda activate
 CMD ["/bin/bash"]
-

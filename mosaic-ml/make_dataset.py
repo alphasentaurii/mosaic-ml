@@ -309,18 +309,15 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--loglevel", type=str, default="info", help="set log level")
     parser.add_argument("-c", "--crpt", type=int, default=0, choices=[0,1], help="set to 1 if corruption data")
     parser.add_argument("-s", "--single", type=str, default=None, help="single dataset, e.g. ia0m04")
-    
     args = parser.parse_args()
     hdf5_file = args.hdf5
     data_path = args.datapath
     output_file = args.output_file
     pattern = args.pattern
     log_level=log_dict[args.loglevel]
+    make, crpt = args.make, args.crpt
     if args.single is None:
-        main(hdf5_file, data_path, output_file, pattern, args.make, args.crpt, log_level)
+        main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level)
     else:
-        single = args.single
-
-    
-
-    
+        data = os.path.join(data_path, args.single)
+        main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level)
