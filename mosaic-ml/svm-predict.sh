@@ -12,5 +12,5 @@ unlabeled_data=${OUT}/svm_unlabeled.csv
 predictions=${OUT}/svm_predictions.csv
 
 python make_dataset.py predict_mosaic -d=$SRCPATH -o=$unlabeled_data
-python make_images.py $SRCPATH -o=$image_path
+python make_images.py $SRCPATH -o=$image_path -d=$unlabeled_data
 python mosaic_predict.py $unlabeled_data $image_path -m=$MODELPATH -o=$predictions

@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from stsci.tools import logutil
 from progressbar import ProgressBar
 import harvest as djh
+import json
 
 __taskname__ = 'mosaic_ml_data_import'
 
@@ -225,7 +226,7 @@ def find_subsamples(df, output_file):
             cat = det.loc[det['cat'] == c]
             if len(cat) > 0:
                 idx = np.random.randint(0, len(cat))
-                subsamples[f'{c}_{d}'] = cat.iloc[idx].index.values
+                subsamples[f'c{c}_d{d}'] = cat.index[idx]
             else:
                 continue
     index = list(subsamples.values())
@@ -234,9 +235,8 @@ def find_subsamples(df, output_file):
         dataset = i.split('_')[-2]
         datasets.append(dataset)
     output_path = os.path.dirname(output_file)
-    with open(f'{output_path}/subsamples.txt', 'w') as f:
-        for d in datasets:
-            f.writelines(f"{d}\n")
+    with open(f'{output_path}/subsamples.txt', 'w') as j:
+        json.dump(subsamples, j)
 
 
 def build_raw(data, data_path, outpath, outfile):

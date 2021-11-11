@@ -108,7 +108,7 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
     saves as >> ./{imgdir}/hst_f110w_all_stoc_uvis_total_ib1f0a/hst_f110w_all_stoc_uvis_total_ib1f0a.png
     """
     # allows for corruption subdir names e.g. ia0m04_f110w_all_stat vs ia0m04
-    subdir, dname = f"{input_path}/{dataset}", dataset.split('_')[0] 
+    subdir, dname = f"{input_path}/{dataset}", dataset.split('_')[0]
     hfiles = glob.glob(f"{subdir}/*total_{dname}_dr?.fits")
     if len(hfiles) > 0:
         for hfile in hfiles:
@@ -217,6 +217,7 @@ def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24
     else:
         paths = glob.glob(f"{input_path}/??????")
         datasets = [p.split('/')[-1] for p in paths]
+    print(f"Generating images for {len(datasets)} datasets.")
     for dataset in datasets:
         print(dataset)
         if gen == 3: # original, point-segment, and GAIA
