@@ -24,6 +24,7 @@ log_dict = {"critical": logutil.logging.CRITICAL,
             "debug": logutil.logging.DEBUG}
 
 def make_h5_file(data_path, patterns=['*_total*_svm_*.json'], hdf5_file='ml_train', crpt=0):
+    print("*** Starting JSON Harvest ***")
     djh.json_harvester(
         json_search_path=data_path,
         json_patterns=patterns,
@@ -68,15 +69,18 @@ def split_index(df):
 
 
 def rename_cols(df, training_cols, splitter='.'):
+    log.info("Renaming columns")
     cols = [col.split(splitter)[-1].lower() for col in df.columns]
     hc = dict(zip(df.columns, cols))
     df.rename(hc, axis='columns', inplace=True)
     extract = [c for c in training_cols if c in df.columns]
     df = df[extract]
+    log.info("New column names: ", df.columns)
     return df
 
 
 def extract_columns(df):
+    print("*** Extracting FITS header prefix columns ***")
     prefix = ['header', 'gen_info', 'number_of_sources', 'Number_of_GAIA_sources.']
     extract_cols = []
     for c in prefix:
@@ -98,6 +102,7 @@ def extract_columns(df):
 
 
 def extract_alignment_data(df, data_path):
+    print("*** Extracting alignment data ***")
     drz_paths = {}
     for idx, row in df.iterrows():
         drz_paths[idx] = ''
@@ -121,13 +126,16 @@ def extract_alignment_data(df, data_path):
             else:
                 align_dct[key][k] = 0
     align_data = pd.DataFrame.from_dict(align_dct, orient='index')
+    log.info(f"Alignment data added:\n {align_data.info()}")
     df = df.join(align_data, how='left')
     return df
 
 
 def find_category(df):
+    print("*** Assigning target name categories ***")
     target_categories = {}
     targets = df['targname'].unique()
+    log.info(f"Unique Target Names: {len(targets)}")
     bar = ProgressBar().start()
     for x, targ in zip(bar(range(len(targets))),targets):
         if targ != 'ANY':
@@ -142,6 +150,7 @@ def find_category(df):
 
     other_cat = {}
     targ_any = df.loc[df['targname'] == 'ANY'][['ra_targ', 'dec_targ']]
+    log.info(f"Other targets (ANY): {len(targ_any)}")
     if len(targ_any) > 0:
         bar = ProgressBar().start()
         for x, (idx, row) in zip(bar(range(len(targ_any))), targ_any.iterrows()):
@@ -164,11 +173,13 @@ def find_category(df):
             categories[i] = v
     categories.update(other_cat)
     df_cat = pd.DataFrame.from_dict(categories, orient='index', columns={'category'})
+    log.info(f"Target Categories Assigned \n {df_cat['category'].value_counts()}")
     df = df.join(df_cat, how='left')
     return df
 
 
 def encode_categories(df, sep=';'):
+    print("*** Encoding Category Names ***")
     CAT = {}
     category_keys = {
             'CALIBRATION': 'C',
@@ -188,6 +199,7 @@ def encode_categories(df, sep=';'):
         if c in category_keys:
             CAT[idx] = category_keys[c]
     df_cat = pd.DataFrame.from_dict(CAT, orient='index', columns={'cat'})
+    log.info("Category encoding complete.\n", df_cat['cat'].value_counts())
     df = df.join(df_cat, how='left')
     return df
 
@@ -228,12 +240,13 @@ def find_subsamples(df, output_file):
 
 
 def build_raw(data, data_path, outpath, outfile):
+    print("*** Extracting Raw Data ***")
     df = extract_columns(data)
     df = extract_alignment_data(df, data_path)
     df = find_category(df)
     # save raw_data before preprocessing
     df['index'] = df.index
-    df.to_csv(f'{outpath}/raw-{outfile}.csv', index=False)
+    df.to_csv(f'{outpath}/raw_{outfile}', index=False)
     df.set_index('index', inplace=True)
     return df
 
@@ -267,11 +280,13 @@ def set_columns(df, outpath):
     return df
 
 
-def main(hdf5_file, output_file, data_path, make, crpt):
+def main(hdf5_file, output_file, data_path, make, crpt, log_level):
+    log.setLevel(log_level)
     outpath = os.path.dirname(output_file)
     outfile = os.path.basename(output_file)
     os.makedirs(outpath, exist_ok=True)
     if make:
+        hdf5_file = os.path.join(outpath, hdf5_file)
         hdf5_file = make_h5_file(data_path, hdf5_file=hdf5_file, crpt=crpt)
     data = load_h5_file(hdf5_file)
     df = build_raw(data, data_path, outpath, outfile)
@@ -296,8 +311,7 @@ if __name__ == '__main__':
     data_path = args.datapath
     output_file = args.output
     log_level=log_dict[args.loglevel]
-    log.setLevel(log_level)
-    main(hdf5_file, output_file, data_path, args.make, args.crpt)
+    main(hdf5_file, output_file, data_path, args.make, args.crpt, log_level)
     
 
     

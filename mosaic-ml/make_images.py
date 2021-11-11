@@ -1,6 +1,7 @@
 import os
 import glob
 import argparse
+from astropy.config import paths
 import pandas as pd
 import numpy as np
 from astropy.wcs import WCS
@@ -186,13 +187,36 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
         return
 
 
+def list_visits(dataset, outpath):
+    df = pd.read_csv(dataset, index_col="index")
+    idx = list(df.index)
+    datasets = []
+    skip = 0
+    for i in idx:
+        impath = os.path.join(outpath, i)
+        visit = i.split('_')[6]
+        if os.path.exists(impath):
+            num = len(glob.glob(f"{impath}/*"))
+            if num < 3:
+                datasets.append(visit)
+            else:
+                skip += 1
+        else:
+            datasets.append(visit)
+    if skip > 0:
+        print("Skipping pre-existing images: ", skip)
+    return list(set(datasets))
+
+
 def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24,24), crpt=0, gen=3):
     if dataset is not None:
-        datasets = [dataset]
+        if dataset.endswith(".csv"):
+            datasets = list_visits(dataset, outpath)
+        else:
+            datasets = [dataset]
     else:
-        if os.path.exists(f'{input_path}/.DS_Store'): # only happens on Mac
-            os.remove(f'{input_path}/.DS_Store')
-        datasets = os.listdir(input_path)
+        paths = glob.glob(f"{input_path}/??????")
+        datasets = [p.split('/')[-1] for p in paths]
     for dataset in datasets:
         print(dataset)
         if gen == 3: # original, point-segment, and GAIA

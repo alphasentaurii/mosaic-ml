@@ -168,7 +168,7 @@ def json_harvester(json_search_path=os.getcwd(),
     num_json = len(json_dict)
     for n,idx in enumerate(json_dict.keys()):
         if ((n/num_json) % 0.1) == 0:
-            log.info("Harvested {}% of the JSON files".format((n/num_json)*100))
+            log.info("Harvested %s of the JSON files".format((n/num_json)*100))
 
         ingest_dict = make_dataframe_line(json_dict[idx], log_level=log_level)
         if ingest_dict:

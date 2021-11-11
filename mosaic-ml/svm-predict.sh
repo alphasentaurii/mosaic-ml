@@ -1,8 +1,8 @@
 #!/bin/bash -xu
 # export SVM_QUALITY_TESTING=on
 
-SRCPATH=${1:-"."} # data/training_2021-07-28/singlevisits
-OUT=${2:-"data"}
+SRCPATH=${1:-"."} # singlevisits/results_2021-10-06
+OUT=${2:-"data"} # data/svm/2021-10-06
 MODELPATH=${3:-"./models/ensemble4d"}
 
 image_path=${OUT}/img/total
