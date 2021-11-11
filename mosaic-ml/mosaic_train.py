@@ -12,6 +12,7 @@ from load_images import detector_training_images
 # from analyze import plot_image_sets
 import tensorflow as tf
 import pickle
+import datetime as dt
 
 DIM = 3
 CH = 3
@@ -53,9 +54,13 @@ def make_image_sets(X_train, X_test, X_val, img_path='.', w=128, h=128, d=9, exp
     return train, test, val
 
 
-def save_model(model, name="mlp", weights=True):
+def save_model(model, name=None, weights=True):
     """The model architecture, and training configuration (including the optimizer, losses, and metrics)
     are stored in saved_model.pb. The weights are saved in the variables/ directory."""
+    if name is None:
+        model_name = str(model.name_scope().rstrip("/").upper())
+        datestamp = dt.datetime.now().isoformat().split('T')[0]
+        name = f"{model_name}_{datestamp}"
     model_path = os.path.join(f"./models", name)
     weights_path = f"{model_path}/weights/ckpt"
     model.save(model_path)
