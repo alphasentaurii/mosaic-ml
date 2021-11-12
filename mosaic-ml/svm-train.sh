@@ -58,7 +58,7 @@ if [[ ${CRPT} -ne "" ]]; then
             cd ${HOME}/mosaic-ml
             #m=`echo $visits | cut -d'/' -f4`
             #python make_images.py $SRCPATH -o=$POS -c=1 -d=$m
-            mv $v ${SVMCRPT}/.
+            #mv $v ${SVMCRPT}/.
         done
     done
 

@@ -2,6 +2,9 @@ import os
 import numpy as np
 from keras.preprocessing import image
 from tqdm import tqdm
+import time
+import datetime as dt
+from ensemble import proc_time
 
 def read_channels(channels, w, h, d, exp=None, color_mode='rgb'):
     """Loads PNG image data and converts to 3D arrays.
@@ -72,8 +75,15 @@ def detector_prediction_images(X, img_path, w, h, d, exp):
             image_files.append(img_frames)
         else:
             idx.remove(i)
+    t_start = time.time()
+    start = dt.datetime.fromtimestamp(t_start).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] LOADING IMAGES  ***{start}***")
     img = []
     for ch1, ch2, ch3 in tqdm(image_files):
         img.append(read_channels([ch1, ch2, ch3], w, h, d, exp=exp))
     images = np.array(img, np.float32)
+    t_end = time.time()
+    end = dt.datetime.fromtimestamp(t_end).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] IMAGES LOADED ***{end}***")
+    proc_time(t_start, t_end)
     return idx, images

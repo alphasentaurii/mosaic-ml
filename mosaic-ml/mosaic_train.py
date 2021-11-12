@@ -4,15 +4,16 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 import argparse
-
-from tqdm import tqdm
-from augment import apply_power_transform, power_transform_matrix, training_data_aug, training_img_aug
-from ensemble import Builder, Compute
-from load_images import detector_training_images
-# from analyze import plot_image_sets
 import tensorflow as tf
 import pickle
+import time
 import datetime as dt
+
+from augment import apply_power_transform, power_transform_matrix, training_data_aug, training_img_aug
+from ensemble import Builder, Compute, proc_time
+from load_images import detector_training_images
+# from analyze import plot_image_sets
+
 
 DIM = 3
 CH = 3
@@ -42,11 +43,18 @@ def make_image_sets(X_train, X_test, X_val, img_path='.', w=128, h=128, d=9, exp
     # y labels are encoded as 0=valid, 1=compromised
     # returns X_train, X_test, y_train, y_test, y_val
     # d=9: 3x3 rgb images (9 channels total)
-    print('[i] LOADING IMAGES')
+    t_start = time.time()
+    start = dt.datetime.fromtimestamp(t_start).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] LOADING IMAGES  ***{start}***")
     
     train = detector_training_images(X_train, img_path, w, h, d, exp)
     test = detector_training_images(X_test, img_path, w, h, d, exp)
     val = detector_training_images(X_val, img_path, w, h, d, exp)
+
+    t_end = time.time()
+    end = dt.datetime.fromtimestamp(t_end).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] IMAGES LOADED ***{end}***")
+    proc_time(t_start, t_end)
     
     print('\n[i] Length of Splits:')
     print(f"X_train={len(train[1])}, X_test={len(test[1])}, X_val={len(val[1])}")

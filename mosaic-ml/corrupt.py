@@ -17,8 +17,7 @@ from astropy.io import fits
 from make_images import generate_total_images, generate_filter_images
 
 SVM_QUALITY_TESTING="on"
-SRCPATH=os.environ.get("SRCPATH", '.')
-HOME=os.getcwd()
+
 
 def pick_random_exposures(dataset):
     hapdir = os.path.join('.', dataset)
@@ -51,14 +50,13 @@ def pick_random_filter(dataset):
 
 
 def find_filter_files(dataset):
-    hapdir = os.path.join('.', dataset)
-    drz_file = glob.glob(f"{hapdir}/*.out")[0]
+    drz_file = glob.glob(f"{dataset}/*.out")[0]
     drizzle_dct = {}
     with open(drz_file, 'r') as f:
         input_strings = f.readlines()
         for s in input_strings:
             tokens = s.split(',')
-            drizzle_file = f"{hapdir}/{tokens[0]}"
+            drizzle_file = f"{dataset}/{tokens[0]}"
             fltr = tokens[-3].replace(';', '_')
             if fltr not in drizzle_dct:
                 drizzle_dct[fltr] = [drizzle_file]
@@ -73,7 +71,7 @@ def modify_paths(drizzle_dct, name):
         drizzle_mod[flt] = []
         for p in paths:
             filename = p.split('/')[-1]
-            new = f"./{name}/{filename}"
+            new = f"{name}/{filename}"
             drizzle_mod[flt].append(new)
     return drizzle_mod
 
@@ -190,9 +188,9 @@ def run_header_corruption(selected_files, level="any", mode="stoc"):
             print_corruptions(wcs_valid, wcs_corrupt)
     
 
-def artificial_misalignment(dataset, selector):
-    shutil.copytree(dataset, f"{dataset}_{selector}")
-    dataset = f"{dataset}_{selector}"
+def artificial_misalignment(dataset, selector, outputs):
+    shutil.copytree(f"{dataset}", f"{outputs}/{dataset}_{selector}")
+    dataset = f"{outputs}/{dataset}_{selector}"
     if selector == "rex":
         selected_files = pick_random_exposures(dataset)
     elif selector == "rfi":
@@ -200,18 +198,19 @@ def artificial_misalignment(dataset, selector):
     run_header_corruption(selected_files)
 
  
-def multiple_permutations(dataset, exp, mode, level="any"):
+def multiple_permutations(dataset, exp, mode, outputs, level="any"):
     drizzle_dct = find_filter_files(dataset)
     filters = list(drizzle_dct.keys())
     separator = "---"*5
     for f in filters:
-        name = f"{dataset}_{f.lower()}_{exp}_{mode}"
+        dname = dataset.split("/")[-1]
+        name = f"{outputs}/{dname}_{f.lower()}_{exp}_{mode}"
         if not os.path.exists(name):
-            shutil.copytree(dataset, name) # Assumes RW permissions for SVM directory
+            shutil.copytree(dataset, name)
         drizzle_mod = modify_paths(drizzle_dct, name)
         out = sys.stdout
         err = 0
-        with open(f"./{name}/corruption.txt", 'w') as logfile:
+        with open(f"{name}/corruption.txt", 'w') as logfile:
             sys.stdout = logfile
             print(separator)
             print("\nFILTER: ", f)
@@ -226,13 +225,13 @@ def multiple_permutations(dataset, exp, mode, level="any"):
             run_header_corruption(selected_files, level=level, mode=mode)
             sys.stdout = out
         if err == 1:
-            with open(f"./{name}/warning.txt", 'w') as warning:
+            with open(f"{name}/warning.txt", 'w') as warning:
                 sys.stdout = warning
                 print("WARNING: only 1 exposure but you requested a subset")
                 sys.stdout = out
 
 
-# experimental (Run SVM via shell script instead)
+# experimental (Run SVM via command line instead)
 def run_svm(dataset):
     os.environ.get('SVM_QUALITY_TESTING', "on")
     mutations = glob.glob(f"{dataset}_*")
@@ -251,7 +250,7 @@ def run_svm(dataset):
         os.chdir(cwd)
 
 
-# experimental (Run SVM via shell script instead)
+# experimental (Run SVM via command line instead)
 def generate_images(dataset, filters=False):
     input_path = os.getcwd()
     generate_total_images(input_path, datasets=[dataset], output_img='./img/total/1')
@@ -259,38 +258,36 @@ def generate_images(dataset, filters=False):
         generate_filter_images(input_path, dataset=dataset, outpath='./img/filter', figsize=(24,24), crpt=0)
 
 
-def run_multiple():
-    visits = glob.glob("*")
-    for visit in visits:
-        multiple_permutations(visit, "all", "stat")
-        multiple_permutations(visit, "all", "stoc")
-        multiple_permutations(visit, "sub", "stat")
-        multiple_permutations(visit, "sub", "stoc")
+def all_permutations(dataset, outputs):
+    multiple_permutations(dataset, "all", "stat", outputs)
+    multiple_permutations(dataset, "all", "stoc", outputs)
+    multiple_permutations(dataset, "sub", "stat", outputs)
+    multiple_permutations(dataset, "sub", "stoc", outputs)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog="Corrupt SVM", usage="python corrupt_svm.py j8ep07 multi -e=sub -m=stoc")
-    parser.add_argument("dataset", type=str, help="path to SVM data (single visit directory or parent directory for multiple datasets (use with `selector=multi`)")
-    parser.add_argument("selector", type=str, choices=["rex", "rfi", "mfi", "multi"], help="`rex`: randomly select subset of exposures from any filter; `rfi`: select all exposures from randomly selected filter; `mfi`: exposures of one filter, repeated for every filter in dataset; `multi`: creates sub- and all- MFI permutations for group of datasets")
+    parser = argparse.ArgumentParser(prog="MosaicML", usage="python corrupt.py j8ep07 mfi -e=sub -m=stat")
+    parser.add_argument("pattern", type=str, default="*", help="Search pattern (for wildcard use * and set --srcpath to parent directory")
+    parser.add_argument("selector", type=str, choices=["rex", "rfi", "mfi", "multi"], help="`rex`: randomly select subset of exposures from any filter; `rfi`: select all exposures from randomly selected filter; `mfi`: exposures of one filter, repeated for every filter in dataset. 'multi' creates sub- and all- MFI permutations")
+    parser.add_argument("-s", "--srcpath", help="parent directory of single visit datasets")
     parser.add_argument("-e", "--exposures", type=str, choices=["all", "sub"], default="all", help="all or subset of exposures")
     parser.add_argument("-m", "--mode", type=str, choices=["stat", "stoc"], default="stoc", help="apply consistent (static) or randomly varying (stochastic) corruptions to each exposure")
     parser.add_argument("-l", "--level", type=str, choices=["major", "standard", "minor", "any"], default="any", help="lambda relative error level")
+    parser.add_argument("-o", "--outputs", type=str, default=".", help="path to corrupt hap file copies")
 
     # get user-defined args and/or set defaults
     args = parser.parse_args()
-    dataset, selector = args.dataset, args.selector
+    pattern, selector = args.pattern, args.selector
     exp, mode = args.exposures, args.mode
-    CWD = os.curdir
-    if CWD != SRCPATH:
-        os.chdir(SRCPATH)
-
-    if selector == "multi":
-        run_multiple()
-    elif selector == "mfi":
-        multiple_permutations(dataset, exp, mode, level=args.level)
-    elif selector in ["rex", "rfi"]:
-        artificial_misalignment(dataset, selector)
+    srcpath, outputs = args.srcpath, args.outputs
+    datasets = glob.glob(f"{srcpath}/{pattern}")
+    if len(datasets) < 1:
+        print("No datasets found using that search pattern.")
     else:
-        print("Selector must be one of: rex, rfi, mfi, multi")
-    if os.getcwd() != HOME:
-        os.chdir(HOME)
+        for dataset in datasets:
+            if selector == "multi":
+                all_permutations(dataset, outputs)
+            elif selector == "mfi":
+                multiple_permutations(dataset, exp, mode, outputs, level=args.level)
+            elif selector in ["rex", "rfi"]:
+                artificial_misalignment(dataset, selector, outputs)

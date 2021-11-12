@@ -218,7 +218,7 @@ def find_subsamples(df, output_file):
     if 'label' not in df.columns:
         return
     df = df.loc[df['label'] == 0]
-    subsamples = {}
+    subsamples = []
     categories = list(df['cat'].unique())
     detectors = list(df['det'].unique())
     for d in detectors:
@@ -227,17 +227,12 @@ def find_subsamples(df, output_file):
             cat = det.loc[det['cat'] == c]
             if len(cat) > 0:
                 idx = np.random.randint(0, len(cat))
-                subsamples[f'c{c}_d{d}'] = cat.index[idx]
-            else:
-                continue
-    index = list(subsamples.values())
-    datasets = []
-    for i in index:
-        dataset = i.split('_')[-2]
-        datasets.append(dataset)
+                samp = cat.index[idx]
+                subsamples.append(samp.split('_')[-1])
     output_path = os.path.dirname(output_file)
-    with open(f'{output_path}/subsamples.txt', 'w') as j:
-        json.dump(subsamples, j)
+    with open(f"{output_path}/subset.txt", "w") as f:
+        for s in subsamples:
+            f.writelines(f"{s}\n")
 
 
 def build_raw(data, data_path, outpath, outfile):

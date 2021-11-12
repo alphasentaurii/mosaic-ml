@@ -9,6 +9,11 @@ import astropy.units as u
 from astropy.io import fits, ascii
 from astropy.visualization import ImageNormalize, ZScaleInterval
 import matplotlib.pyplot as plt
+import datetime as dt
+import time
+from tqdm import tqdm
+
+from ensemble import proc_time
 
 
 def point_flag_color(x):
@@ -64,8 +69,6 @@ def create_image_name(hfile, dataset, P, S, G, crpt, out):
     if crpt:
         sfx = '_'.join(dataset.split('_')[1:])
         name = f"{name}_{sfx}"
-        # pfx, sfx = '_'.join(dataset.split('_')[1:]), '_'.join(name.split('_')[4:])
-        # name = f"hst_{pfx}_{sfx}"
     outpath = f'{out}/{name}'
     os.makedirs(outpath, exist_ok=True)
     imgpath = os.path.join(outpath, f'{name}{catstr}')
@@ -107,7 +110,7 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
     ./{input_path}/ia0m04_f110w_all_stoc/hst_11099_04_wfc3_ir_total_ia0m04_drz.fits
     saves as >> ./{imgdir}/hst_f110w_all_stoc_uvis_total_ib1f0a/hst_f110w_all_stoc_uvis_total_ib1f0a.png
     """
-    # allows for corruption subdir names e.g. ia0m04_f110w_all_stat vs ia0m04
+    # allows for corruption subdir names e.g. ia0m04_f110w_all_stat and ia0m04
     subdir, dname = f"{input_path}/{dataset}", dataset.split('_')[0]
     hfiles = glob.glob(f"{subdir}/*total_{dname}_dr?.fits")
     if len(hfiles) > 0:
@@ -145,8 +148,8 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
                                             edgecolor=fcol[0], facecolor='none',
                                             transform=ax.get_transform('fk5'),
                                             marker='o', s=15, alpha=0.5)
-                else:
-                    print("Point cat not found: ", dataset)
+                # else:
+                #     print("Point cat not found: ", dataset)
 
             if S:
                 s_cat = glob.glob(f"{subdir}/{name}_segment-cat.ecsv")
@@ -160,8 +163,8 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
                                         edgecolor=fcol[0], facecolor='none',
                                         transform=ax.get_transform('fk5'),
                                         marker='o', s=15, alpha=0.5)
-                else:
-                    print("Segment cat not found: ", dataset)
+                # else:
+                #     print("Segment cat not found: ", dataset)
             
             if G:
                 g_cat = glob.glob(f"{subdir}/*_{detector}_*GAIAeDR3_ref_cat.ecsv")
@@ -172,8 +175,8 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
                         edgecolor='cyan', facecolor='none',
                         transform=ax.get_transform('fk5'),
                         marker='o', s=15)
-                else:
-                    print("GAIA cat not found: ", dataset)
+                # else:
+                #     print("GAIA cat not found: ", dataset)
 
             xlim, ylim = wcs.wcs_world2pix(radeclim, 1).T
             ax.set_xlim(xlim)
@@ -181,7 +184,7 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
             imgpath = create_image_name(hfile, dataset, P, S, G, crpt, out)
             plt.savefig(imgpath, bbox_inches='tight')
             plt.close(fig)
-            print(f"\t{imgpath}.png")
+            #print(f"\t{imgpath}.png")
     else:
         print(f"{dataset} fits file could not be found")
         return
@@ -217,9 +220,12 @@ def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24
     else:
         paths = glob.glob(f"{input_path}/??????")
         datasets = [p.split('/')[-1] for p in paths]
+    t_start = time.time()
+    start = dt.datetime.fromtimestamp(t_start).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] DRAWING IMAGES  ***{start}***")
     print(f"Generating images for {len(datasets)} datasets.")
-    for dataset in datasets:
-        print(dataset)
+    for dataset in tqdm(datasets):
+        #print(dataset)
         if gen == 3: # original, point-segment, and GAIA
             draw_total_images(input_path, dataset, out=outpath, figsize=figsize, crpt=crpt)
             draw_total_images(input_path, dataset, P=1, S=1, out=outpath, figsize=figsize, crpt=crpt)
@@ -230,6 +236,10 @@ def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24
             draw_total_images(input_path, dataset, P=1, S=1, out=outpath, figsize=figsize, crpt=crpt)
         else: # original (0)
             draw_total_images(input_path, dataset, out=outpath, figsize=figsize, crpt=crpt)
+    t_end = time.time()
+    end = dt.datetime.fromtimestamp(t_end).strftime("%m/%d/%Y - %I:%M:%S %p")
+    print(f"\n[i] IMAGE GENERATION COMPLETE ***{end}***")
+    proc_time(t_start, t_end)
 
 
 def draw_filter_images(input_path, dataset, out='./filter_img', figsize=(24,24), crpt=0):
