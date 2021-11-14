@@ -1,11 +1,11 @@
 import os
+import sys
 import glob
 import argparse
 from astropy.config import paths
 import pandas as pd
 import numpy as np
 from astropy.wcs import WCS
-import astropy.units as u
 from astropy.io import fits, ascii
 from astropy.visualization import ImageNormalize, ZScaleInterval
 import matplotlib.pyplot as plt
@@ -54,7 +54,7 @@ def draw_catalogs(cfile, catalog):
     return cat, fcolor_, fcolor
 
 
-def create_image_name(hfile, dataset, P, S, G, crpt, out):
+def create_image_name(name, dataset, P, S, G, crpt, outpath):
     if P == 1 and S == 1:
         catstr = '_source'
     elif P == 1 and S == 0:
@@ -65,17 +65,16 @@ def create_image_name(hfile, dataset, P, S, G, crpt, out):
         catstr = '_gaia'
     else:
         catstr = ''
-    name = os.path.basename(hfile).split('.')[0][:-4]
     if crpt:
         sfx = '_'.join(dataset.split('_')[1:])
         name = f"{name}_{sfx}"
-    outpath = f'{out}/{name}'
+    outpath = f'{outpath}/{name}'
     os.makedirs(outpath, exist_ok=True)
     imgpath = os.path.join(outpath, f'{name}{catstr}')
     return imgpath
 
 
-def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(24,24), crpt=0):
+def draw_total_images(input_path, outpath, dataset, P=0, S=0, G=0, figsize=(24,24), crpt=0):
     """
     Opens fits files from local directory path to generate total detection drizzled images 
     aligned to WCS with point/segment/gaia catalog overlay options. Saves figure as png.
@@ -181,7 +180,7 @@ def draw_total_images(input_path, dataset, P=0, S=0, G=0, out="./img", figsize=(
             xlim, ylim = wcs.wcs_world2pix(radeclim, 1).T
             ax.set_xlim(xlim)
             ax.set_ylim(ylim)
-            imgpath = create_image_name(hfile, dataset, P, S, G, crpt, out)
+            imgpath = create_image_name(name, dataset, P, S, G, crpt, outpath)
             plt.savefig(imgpath, bbox_inches='tight')
             plt.close(fig)
             #print(f"\t{imgpath}.png")
@@ -211,15 +210,22 @@ def list_visits(dataset, outpath):
     return list(set(datasets))
 
 
-def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24,24), crpt=0, gen=3):
+def generate_total_images(input_path, outpath, dataset=None, figsize=(24,24), crpt=0, gen=3):
     if dataset is not None:
         if dataset.endswith(".csv"):
             datasets = list_visits(dataset, outpath)
         else:
             datasets = [dataset]
     else:
-        paths = glob.glob(f"{input_path}/??????")
+        if crpt == 0:
+            paths = glob.glob(f"{input_path}/??????")
+        else:
+            paths = glob.glob(f"{input_path}/??????_*_???_st??")
         datasets = [p.split('/')[-1] for p in paths]
+    print(f"\nFound {len(datasets)} datasets.")
+    if len(datasets) == 0:
+        print("Exiting.")
+        sys.exit(1)
     t_start = time.time()
     start = dt.datetime.fromtimestamp(t_start).strftime("%m/%d/%Y - %I:%M:%S %p")
     print(f"\n[i] DRAWING IMAGES  ***{start}***")
@@ -227,26 +233,26 @@ def generate_total_images(input_path, dataset=None, outpath='./img', figsize=(24
     for dataset in tqdm(datasets):
         #print(dataset)
         if gen == 3: # original, point-segment, and GAIA
-            draw_total_images(input_path, dataset, out=outpath, figsize=figsize, crpt=crpt)
-            draw_total_images(input_path, dataset, P=1, S=1, out=outpath, figsize=figsize, crpt=crpt)
-            draw_total_images(input_path, dataset, G=1, out=outpath, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, P=1, S=1, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, G=1, figsize=figsize, crpt=crpt)
         elif gen == 2: # GAIA
-            draw_total_images(input_path, dataset, G=1, out=outpath, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, G=1, figsize=figsize, crpt=crpt)
         elif gen == 1: # point-segment
-            draw_total_images(input_path, dataset, P=1, S=1, out=outpath, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, P=1, S=1, figsize=figsize, crpt=crpt)
         else: # original (0)
-            draw_total_images(input_path, dataset, out=outpath, figsize=figsize, crpt=crpt)
+            draw_total_images(input_path, outpath, dataset, figsize=figsize, crpt=crpt)
     t_end = time.time()
     end = dt.datetime.fromtimestamp(t_end).strftime("%m/%d/%Y - %I:%M:%S %p")
     print(f"\n[i] IMAGE GENERATION COMPLETE ***{end}***")
     proc_time(t_start, t_end)
 
 
-def draw_filter_images(input_path, dataset, out='./filter_img', figsize=(24,24), crpt=0):
+def draw_filter_images(input_path, outpath, dataset, figsize=(24,24), crpt=0):
     subdir, dname = f"{input_path}/{dataset}", dataset.split('_')[0]
     filter_files = glob.glob(f"{subdir}/*[!total]_{dname}_dr?.fits")
     if len(filter_files) > 0:
-        outpath = os.path.join(out, dname)
+        outpath = os.path.join(outpath, dname)
         os.makedirs(outpath, exist_ok=True)
     else:
         print("Filter images missing: ", dataset)
@@ -284,7 +290,7 @@ def draw_filter_images(input_path, dataset, out='./filter_img', figsize=(24,24),
         print(f"\t{imgpath}.png")
 
 
-def generate_filter_images(input_path, dataset=None, outpath='./filter_img', figsize=(24,24), crpt=0):
+def generate_filter_images(input_path, outpath, dataset=None, figsize=(24,24), crpt=0):
     if dataset is not None:
         datasets = [dataset]
     else:
@@ -293,13 +299,13 @@ def generate_filter_images(input_path, dataset=None, outpath='./filter_img', fig
         datasets = os.listdir(input_path)
     for dataset in datasets:
         print(dataset)
-        draw_filter_images(input_path, dataset, out=outpath, figsize=figsize, crpt=crpt)
+        draw_filter_images(input_path, outpath, dataset, figsize=figsize, crpt=crpt)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", type=str, help="path to datasets directory")
-    parser.add_argument("-o", "--output_path", type=str, help="path to png image directory")
+    parser.add_argument("outpath", type=str, help="directory path to save png images")
     parser.add_argument("-t", "--imgtype", type=str, choices=['total', 'filter'], default='total', help="draw total detection or filter level images")
     parser.add_argument("-g", "--generator", type=int, choices=[0, 1, 2, 3], default=3, help="0: generate original only; 1: point-segment, 2: gaia; 3: original, point-segment, and gaia (3 separate images)")
     parser.add_argument("-s", "--size", type=int, default=24, help="figsize")
@@ -307,13 +313,13 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--dataset", type=str, default=None, help="specify single dataset (default is None to generate images for all dataset subdirectories in input_path")
     args = parser.parse_args()
     input_path = args.input_path
-    outpath = args.output_path
+    outpath = args.outpath
     img_type = args.imgtype
     gen = args.generator
     size = (args.size, args.size)
     crpt = args.corruptions
     dataset = args.dataset
     if img_type == 'total':
-        generate_total_images(input_path, dataset=dataset, outpath=outpath, figsize=size, crpt=crpt, gen=gen)
+        generate_total_images(input_path, outpath, dataset=dataset, figsize=size, crpt=crpt, gen=gen)
     else:
-        generate_filter_images(input_path, dataset=dataset, outpath=outpath, figsize=size, crpt=crpt)
+        generate_filter_images(input_path, outpath, dataset=dataset,  figsize=size, crpt=crpt)

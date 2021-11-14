@@ -45,5 +45,5 @@ RUN pip install numpy~=1.21
 # ------------------------------------------------
 USER developer
 ENV SVM_QUALITY_TESTING=on
-RUN conda init bash && source ~/.bashrc && conda activate
+RUN conda init bash && source ~/.bashrc && conda activate && conda install typing-extensions
 CMD ["/bin/bash"]

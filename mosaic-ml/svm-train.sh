@@ -1,13 +1,13 @@
 #!/bin/bash -xu
 export SVM_QUALITY_TESTING=on
 
-SRCPATH=${1:-"."} # data/training_2021-07-28/singlevisits
-OUT=${2:-"./data"} #OUT=`echo $SRCPATH | cut -d'/' -f1` # ./data
+SRCPATH=${1:-"data/singlevisits"} # data/singlevisits/results_2021-07-28
+OUT=${2:-"data/synthetic"}
 DATASETS=${3:-""} # ('icon04')
 REG=${reg:-"1"}
 EXP=${expo:-""}
 MODE=${mode:-""}
-CRPT=${crpt:-""}
+SYN=${syn:-""}
 FILTERS=${filters:-""}
 
 if [[ -z ${DATASETS} ]]; then
@@ -36,20 +36,18 @@ if [[ ${misaligned} -ne "" ]]; then
     ls $POS | wc -l
 fi
 
-if [[ ${CRPT} -ne "" ]]; then
-    SVMCRPT=${OUT}/svmcrpt
-    mkdir $SVMCRPT
+if [[ ${syn} -ne "" ]]; then
+    synthetic=${OUT}/synthetic
+    mkdir $synthetic
 
-    for dataset in "${DATASETS[@]}"
-    do
-        if [[ ${EXP} != "" && ${MODE} != "" ]]; then
+    if [[ ${EXP} != "" && ${MODE} != "" ]]; then
+        for dataset in "${DATASETS[@]}"
+        do
             python corrupt.py ${dataset} mfi -e=${EXP} -m=${MODE}
-        else
-            python corrupt.py ${dataset} mfi
-            python corrupt.py ${dataset} mfi -m=stat
-            python corrupt.py ${dataset} mfi -e=sub
-            python corrupt.py ${dataset} mfi -e=sub -m=stat
-        fi
+        done
+    else
+        python corrupt.py $SRCPATH $synthetic multi
+    fi
         visits=(`find ${SRCPATH}/${dataset}_* -maxdepth 0`)
         for v in "${visits[@]}"
         do
@@ -60,7 +58,7 @@ if [[ ${CRPT} -ne "" ]]; then
             #python make_images.py $SRCPATH -o=$POS -c=1 -d=$m
             #mv $v ${SVMCRPT}/.
         done
-    done
+    
 
     crpt_training=${OUT}/svm_crpt.csv 
 

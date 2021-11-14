@@ -18,8 +18,10 @@ __taskname__ = 'diagnostic_json_harvester'
 
 MSG_DATEFMT = '%Y%j%H%M%S'
 SPLUNK_MSG_FORMAT = '%(asctime)s %(levelname)s src=%(name)s- %(message)s'
-log = logutil.create_logger(__name__, level=logutil.logging.NOTSET, stream=sys.stdout,
+log = logutil.create_logger(__name__, level=logutil.logging.INFO, stream=sys.stdout,
                             format=SPLUNK_MSG_FORMAT, datefmt=MSG_DATEFMT)
+
+
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -171,7 +173,7 @@ def json_harvester(json_search_path=os.getcwd(),
     num_json = len(json_dict)
     for n,idx in enumerate(json_dict.keys()):
         if ((n/num_json) % 0.1) == 0:
-            log.info("Harvested %s of the JSON files".format((n/num_json)*100))
+            log.info(f"Harvested {num_json} of the JSON files")
 
         ingest_dict = make_dataframe_line(json_dict[idx], log_level=log_level)
         if ingest_dict:

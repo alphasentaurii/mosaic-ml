@@ -14,14 +14,15 @@ import subprocess
 import glob
 import numpy as np
 from astropy.io import fits
+from tqdm import tqdm
+from progressbar import ProgressBar
 from make_images import generate_total_images, generate_filter_images
 
 SVM_QUALITY_TESTING="on"
 
 
 def pick_random_exposures(dataset):
-    hapdir = os.path.join('.', dataset)
-    hapfiles = glob.glob(f"{hapdir}/*.fits")
+    hapfiles = glob.glob(f"{dataset}/*.fits")
     n_corruptions = np.random.randint(2, 4)
     if len(hapfiles) < n_corruptions:
         n_corruptions = max(len(hapfiles), 2)
@@ -189,20 +190,23 @@ def run_header_corruption(selected_files, level="any", mode="stoc"):
     
 
 def artificial_misalignment(dataset, selector, outputs):
-    shutil.copytree(f"{dataset}", f"{outputs}/{dataset}_{selector}")
-    dataset = f"{outputs}/{dataset}_{selector}"
+    dname = dataset.split("/")[-1]
+    name = f"{outputs}/{dname}_{selector}"
+    shutil.copytree(dataset, name)
     if selector == "rex":
-        selected_files = pick_random_exposures(dataset)
+        selected_files = pick_random_exposures(name)
     elif selector == "rfi":
-        selected_files = pick_random_filter(dataset)
+        selected_files = pick_random_filter(name)
     run_header_corruption(selected_files)
 
- 
+
 def multiple_permutations(dataset, exp, mode, outputs, level="any"):
     drizzle_dct = find_filter_files(dataset)
     filters = list(drizzle_dct.keys())
     separator = "---"*5
-    for f in filters:
+    bar = ProgressBar().start()
+
+    for x, f in zip(bar(range(len(filters))),filters):
         dname = dataset.split("/")[-1]
         name = f"{outputs}/{dname}_{f.lower()}_{exp}_{mode}"
         if not os.path.exists(name):
@@ -229,6 +233,8 @@ def multiple_permutations(dataset, exp, mode, outputs, level="any"):
                 sys.stdout = warning
                 print("WARNING: only 1 exposure but you requested a subset")
                 sys.stdout = out
+        bar.update(x)
+    bar.finish()
 
 
 # experimental (Run SVM via command line instead)
@@ -267,27 +273,26 @@ def all_permutations(dataset, outputs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog="MosaicML", usage="python corrupt.py j8ep07 mfi -e=sub -m=stat")
-    parser.add_argument("pattern", type=str, default="*", help="Search pattern (for wildcard use * and set --srcpath to parent directory")
+    parser.add_argument("srcpath", type=str, help="parent directory of single visit datasets")
+    parser.add_argument("outputs", type=str, help="path for saving corrupted hap file copies")
     parser.add_argument("selector", type=str, choices=["rex", "rfi", "mfi", "multi"], help="`rex`: randomly select subset of exposures from any filter; `rfi`: select all exposures from randomly selected filter; `mfi`: exposures of one filter, repeated for every filter in dataset. 'multi' creates sub- and all- MFI permutations")
-    parser.add_argument("-s", "--srcpath", help="parent directory of single visit datasets")
+    parser.add_argument("-p", "--pattern", type=str, default="*", help="glob search pattern - default is wildcard *")
     parser.add_argument("-e", "--exposures", type=str, choices=["all", "sub"], default="all", help="all or subset of exposures")
     parser.add_argument("-m", "--mode", type=str, choices=["stat", "stoc"], default="stoc", help="apply consistent (static) or randomly varying (stochastic) corruptions to each exposure")
     parser.add_argument("-l", "--level", type=str, choices=["major", "standard", "minor", "any"], default="any", help="lambda relative error level")
-    parser.add_argument("-o", "--outputs", type=str, default=".", help="path to corrupt hap file copies")
-
     # get user-defined args and/or set defaults
     args = parser.parse_args()
-    pattern, selector = args.pattern, args.selector
-    exp, mode = args.exposures, args.mode
-    srcpath, outputs = args.srcpath, args.outputs
+    srcpath, outputs, selector =  args.srcpath, args.outputs, args.selector
+    pattern, expo, mode = args.pattern, args.exposures, args.mode
     datasets = glob.glob(f"{srcpath}/{pattern}")
     if len(datasets) < 1:
-        print("No datasets found using that search pattern.")
+        print("No datasets found matching the search pattern.")
+        sys.exit(1)
     else:
-        for dataset in datasets:
+        for dataset in tqdm(datasets):
             if selector == "multi":
                 all_permutations(dataset, outputs)
             elif selector == "mfi":
-                multiple_permutations(dataset, exp, mode, outputs, level=args.level)
+                multiple_permutations(dataset, expo, mode, outputs, level=args.level)
             elif selector in ["rex", "rfi"]:
                 artificial_misalignment(dataset, selector, outputs)

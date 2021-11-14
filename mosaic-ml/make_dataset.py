@@ -1,31 +1,16 @@
 import pandas as pd
 import argparse
 import os
-import sys
 from astropy.io import fits
 from astroquery.mast import Observations
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from stsci.tools import logutil
 from progressbar import ProgressBar
 import harvest as djh
-import json
 
-__taskname__ = 'mosaic_ml_data_import'
-
-MSG_DATEFMT = '%Y%j%H%M%S'
-SPLUNK_MSG_FORMAT = '%(asctime)s %(levelname)s src=%(name)s- %(message)s'
-log = logutil.create_logger(__name__, level=logutil.logging.NOTSET, stream=sys.stdout,
-                            format=SPLUNK_MSG_FORMAT, datefmt=MSG_DATEFMT)
-
-log_dict = {"critical": logutil.logging.CRITICAL,
-            "error": logutil.logging.ERROR,
-            "warning": logutil.logging.WARNING,
-            "info": logutil.logging.INFO,
-            "debug": logutil.logging.DEBUG}
 
 def make_h5_file(data_path, outpath, patterns=['*_total*_svm_*.json'], hdf5_file='ml_train', crpt=0):
-    print("*** Starting JSON Harvest ***")
+    print("\n*** Starting JSON Harvest ***")
     hdf5_file = os.path.join(outpath, hdf5_file)
     djh.json_harvester(
         json_search_path=data_path,
@@ -47,7 +32,7 @@ def load_h5_file(h5_file):
             print(f"Dataframe created: {data.shape}")
     else:
         errmsg = "HDF5 file {} not found!".format(h5_file)
-        log.error(errmsg)
+        print(errmsg)
         raise Exception(errmsg)
     return data
 
@@ -71,18 +56,18 @@ def split_index(df):
 
 
 def rename_cols(df, training_cols, splitter='.'):
-    log.info("Renaming columns")
+    print("\nRenaming columns")
     cols = [col.split(splitter)[-1].lower() for col in df.columns]
     hc = dict(zip(df.columns, cols))
     df.rename(hc, axis='columns', inplace=True)
     extract = [c for c in training_cols if c in df.columns]
     df = df[extract]
-    log.info("New column names: ", df.columns)
+    print("New column names: ", df.columns)
     return df
 
 
 def extract_columns(df):
-    print("*** Extracting FITS header prefix columns ***")
+    print("\n*** Extracting FITS header prefix columns ***")
     prefix = ['header', 'gen_info', 'number_of_sources', 'Number_of_GAIA_sources.']
     extract_cols = []
     for c in prefix:
@@ -104,12 +89,11 @@ def extract_columns(df):
 
 
 def extract_alignment_data(df, data_path):
-    print("*** Extracting alignment data ***")
+    print("\n*** Extracting alignment data ***")
     drz_paths = {}
     for idx, row in df.iterrows():
         drz_paths[idx] = ''
-        #dname =  row['dataset']
-        dname = '_'.join(row['dataset'].split('-'))
+        dname =  row['dataset']
         drz = row['imgname']
         path = os.path.join(data_path, dname, drz)
         drz_paths[idx] = path
@@ -128,16 +112,16 @@ def extract_alignment_data(df, data_path):
             else:
                 align_dct[key][k] = 0
     align_data = pd.DataFrame.from_dict(align_dct, orient='index')
-    log.info(f"Alignment data added:\n {align_data.info()}")
+    print(f"Alignment data added.")
     df = df.join(align_data, how='left')
     return df
 
 
 def find_category(df):
-    print("*** Assigning target name categories ***")
+    print("\n*** Assigning target name categories ***")
     target_categories = {}
     targets = df['targname'].unique()
-    log.info(f"Unique Target Names: {len(targets)}")
+    print(f"\nUnique Target Names: {len(targets)}")
     bar = ProgressBar().start()
     for x, targ in zip(bar(range(len(targets))),targets):
         if targ != 'ANY':
@@ -152,8 +136,9 @@ def find_category(df):
 
     other_cat = {}
     targ_any = df.loc[df['targname'] == 'ANY'][['ra_targ', 'dec_targ']]
-    log.info(f"Other targets (ANY): {len(targ_any)}")
+    
     if len(targ_any) > 0:
+        print(f"Other targets (ANY): {len(targ_any)}")
         bar = ProgressBar().start()
         for x, (idx, row) in zip(bar(range(len(targ_any))), targ_any.iterrows()):
             other_cat[idx] = {}
@@ -175,13 +160,14 @@ def find_category(df):
             categories[i] = v
     categories.update(other_cat)
     df_cat = pd.DataFrame.from_dict(categories, orient='index', columns={'category'})
-    log.info(f"Target Categories Assigned \n {df_cat['category'].value_counts()}")
+    print(f"\nTarget Categories Assigned.")
+    print(list(df_cat['category'].unique()))
     df = df.join(df_cat, how='left')
     return df
 
 
 def encode_categories(df, sep=';'):
-    print("*** Encoding Category Names ***")
+    print("\n*** Encoding Category Names ***")
     CAT = {}
     category_keys = {
             'CALIBRATION': 'C',
@@ -201,7 +187,7 @@ def encode_categories(df, sep=';'):
         if c in category_keys:
             CAT[idx] = category_keys[c]
     df_cat = pd.DataFrame.from_dict(CAT, orient='index', columns={'cat'})
-    log.info("Category encoding complete.\n", df_cat['cat'].value_counts())
+    print("\nCategory encoding complete.")
     df = df.join(df_cat, how='left')
     return df
 
@@ -210,7 +196,6 @@ def encode_features(df, encodings):
     for col, name in encodings.items():
         encoder = LabelEncoder().fit(df[col])
         df[name] = encoder.transform(df[col])
-        print(df[name].value_counts())
     return df
 
 
@@ -236,7 +221,7 @@ def find_subsamples(df, output_file):
 
 
 def build_raw(data, data_path, outpath, outfile):
-    print("*** Extracting Raw Data ***")
+    print("\n*** Extracting Raw Data ***")
     df = extract_columns(data)
     df = extract_alignment_data(df, data_path)
     df = find_category(df)
@@ -276,8 +261,7 @@ def set_columns(df, outpath):
     return df
 
 
-def main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level):
-    log.setLevel(log_level)
+def main(hdf5_file, data_path, output_file, pattern, make, crpt):
     outpath = os.path.dirname(output_file)
     outfile = os.path.basename(output_file)
     os.makedirs(outpath, exist_ok=True)
@@ -295,13 +279,12 @@ def main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog="Mosaic ML Data Import", usage="python make_dataset.py ml_train -d=singlevisits -o=svm.csv")
+    parser = argparse.ArgumentParser(prog="MosaicML", usage="python make_dataset.py ml_train -d=singlevisits -o=svm.csv")
     parser.add_argument("hdf5", type=str, default='ml_train_dataframe', help="hdf5 filepath")
     parser.add_argument("-d", "--datapath", type=str, default="./data/visits", help="svm datasets directory")
     parser.add_argument("-o","--output_file", type=str, default="./data/svm.csv", help="csv output filepath")
     parser.add_argument("-p", "--pattern", type=str, default="*_total*_svm_*.json")
     parser.add_argument("-m","--make", type=str, default=1, help="make hdf5 file from json files")
-    parser.add_argument("-l", "--loglevel", type=str, default="info", help="set log level")
     parser.add_argument("-c", "--crpt", type=int, default=0, choices=[0,1], help="set to 1 if corruption data")
     parser.add_argument("-s", "--single", type=str, default=None, help="single dataset, e.g. ia0m04")
     args = parser.parse_args()
@@ -309,10 +292,10 @@ if __name__ == '__main__':
     data_path = args.datapath
     output_file = args.output_file
     pattern = args.pattern
-    log_level=log_dict[args.loglevel]
     make, crpt = args.make, args.crpt
     if args.single is None:
-        main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level)
-    else:
+        main(hdf5_file, data_path, output_file, pattern, make, crpt)
+    else: 
+        #TODO
         data = os.path.join(data_path, args.single)
-        main(hdf5_file, data_path, output_file, pattern, make, crpt, log_level)
+        main(hdf5_file, data_path, output_file, pattern, make, crpt)

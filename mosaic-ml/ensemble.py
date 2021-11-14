@@ -3,17 +3,15 @@ import os
 import pandas as pd
 import numpy as np
 import os
-import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-bright')
 font_dict={'family':'"Titillium Web", monospace','size':16}
 mpl.rc('font',**font_dict)
-#ignore pink warnings
-import warnings
-warnings.filterwarnings('ignore')
 import plotly.graph_objects as go
+from sklearn import metrics
+import itertools
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras import layers, optimizers, callbacks
 from tensorflow.keras.layers import Dense, Input, concatenate
@@ -31,10 +29,6 @@ import datetime as dt
 from augment import augment_data, augment_image
 
 HOME = os.path.abspath(os.curdir)
-# DATA = os.path.join(HOME, 'data')
-# SUBFOLDER =  os.path.join(DATA, '2021-07-28')
-# IMG_DIR = os.path.join(SUBFOLDER, 'images')
-# TRAIN_PATH = f"{IMG_DIR}/training"
 
 DIM = 3
 CH = 3
@@ -402,13 +396,6 @@ class Compute(Builder):
         matrix: can pass in matrix or a tuple (ytrue,ypred) to create on the fly 
         classes: class names for target variables
         """
-        from sklearn import metrics                       
-        from sklearn.metrics import confusion_matrix #ugh
-        import itertools
-        import numpy as np
-        import matplotlib as mpl
-        import matplotlib.pyplot as plt
-        
         # make matrix if tuple passed to matrix:
         if isinstance(matrix, tuple):
             y_true = matrix[0].copy()
