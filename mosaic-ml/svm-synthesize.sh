@@ -6,7 +6,7 @@ DRIZ=${2:-""}
 DRAW=${3:-""}
 DATA=${4:-""}
 
-DATASETS=${DATASETS:-""} # ('icon04')
+#DATASETS=${DATASETS:-""} # ('icon04')
 SRC=${SRC:-"data/singlevisits"} # data/singlevisits/results_2021-07-28
 OUT=${OUT:-"data"}
 EXPO=${EXPO:-"*"}

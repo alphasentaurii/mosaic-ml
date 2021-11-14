@@ -1,6 +1,7 @@
 */data/*
 mml-data
 
+*filter_similarity.py
 # Compiled files
 *.py[cod]
 *.a
