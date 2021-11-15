@@ -28,7 +28,6 @@ import time
 import datetime as dt
 from augment import augment_data, augment_image
 
-HOME = os.path.abspath(os.curdir)
 
 DIM = 3
 CH = 3
@@ -79,6 +78,7 @@ class Builder:
         self.mlp = None
         self.cnn = None
         self.history = None
+        self.name = None
 
 
     def decay_learning_rate(self):
@@ -188,12 +188,14 @@ class Builder:
             return self.model
 
     def build_ensemble(self, lr_sched=True):
+        if self.name is None:
+            self.name = "ensemble4d"
         self.mlp = self.build_mlp(input_shape=self.X_train[0].shape[1])
         self.cnn = self.build_cnn(input_shape=self.X_train[1].shape[1:])
         combinedInput = concatenate([self.mlp.output, self.cnn.output])
         x = Dense(9, activation="leaky_relu", name="combined_input")(combinedInput)
         x = Dense(1, activation="sigmoid", name="ensemble_output")(x)
-        self.model = Model(inputs=[self.mlp.input, self.cnn.input], outputs=x, name="ensemble4d")
+        self.model = Model(inputs=[self.mlp.input, self.cnn.input], outputs=x, name=self.name)
         if lr_sched is True:
             lr_schedule = self.decay_learning_rate()
         else:

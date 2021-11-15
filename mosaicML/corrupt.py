@@ -10,13 +10,17 @@ import os
 import sys
 import argparse
 import shutil
-import subprocess
+# import subprocess
 import glob
 import numpy as np
 from astropy.io import fits
+import time
+import datetime as dt
 from tqdm import tqdm
 from progressbar import ProgressBar
+from drizzlepac import runsinglehap
 from make_images import generate_total_images, generate_filter_images
+from ensemble import proc_time
 
 SVM_QUALITY_TESTING="on"
 
@@ -237,26 +241,23 @@ def multiple_permutations(dataset, exp, mode, outputs, level="any"):
     bar.finish()
 
 
-# experimental (Run SVM via command line instead)
-def run_svm(dataset):
+def run_svm(dataset, outputs):
     os.environ.get('SVM_QUALITY_TESTING', "on")
-    mutations = glob.glob(f"{dataset}_*")
-    cwd = os.getcwd()
+    mutations = glob.glob(f"{outputs}/{dataset}_*")
     for m in mutations:
-        os.chdir(m)
-        warning = f"./warning.txt"
+        warning = f"{m}/warning.txt"
         if os.path.exists(warning):
             print(f"Skipping {m} - see warning file")
         else:
-            drz_file = glob.glob(f"*.out")[0]
-            cmd = ["runsinglehap", drz_file]
-            err = subprocess.call(cmd)
-            if err:
-                print(f"SVM failed to run for {m}")
-        os.chdir(cwd)
+            drz_file = glob.glob(f"{m}/*.out")[0]
+            if drz_file:
+                runsinglehap.perform(drz_file, log_level='info')
+            # cmd = ["runsinglehap", drz_file]
+            # err = subprocess.call(cmd)
+            # if err:
+            #     print(f"SVM failed to run for {m}")
 
 
-# experimental (Run SVM via command line instead)
 def generate_images(dataset, filters=False):
     input_path = os.getcwd()
     generate_total_images(input_path, datasets=[dataset], output_img='./img/total/1')
@@ -271,6 +272,70 @@ def all_permutations(dataset, outputs):
     multiple_permutations(dataset, "sub", "stoc", outputs)
 
 
+def clock(procname, outputs, s, e=None):
+    out = sys.stdout
+    if e is None:
+        start = dt.datetime.fromtimestamp(s).strftime("%m/%d/%Y - %I:%M:%S %p")
+        print(f"\n***STARTING {procname}*** {start}")
+    else:
+        end = dt.datetime.fromtimestamp(e).strftime("%m/%d/%Y - %I:%M:%S %p")
+        print(f"\nTRAINING COMPLETE: {end} ***{procname}***")
+        with open(f"{outputs}/log.txt", 'a') as logfile:
+            sys.stdout = logfile
+            proc_time(s, e)
+    sys.stdout = out
+    
+
+
+def run_batch_flow(datasets, outputs, prc, cfg):
+    if prc["crpt"]:
+        s = time.time()
+        clock("CORRUPTION", outputs, s)
+        for dataset in tqdm(datasets):
+            if selector == "multi":
+                all_permutations(dataset, outputs)
+            elif selector == "mfi":
+                multiple_permutations(dataset, expo, mode, outputs, level=args.level)
+            elif selector in ["rex", "rfi"]:
+                artificial_misalignment(dataset, selector, outputs)
+        e = time.time()
+        clock("CORRUPTION", outputs, s, e=e)
+
+    if prc["runsvm"]:
+        s = time.time()
+        clock("ALIGNMENT", s)
+        for dataset in tqdm(datasets):
+            run_svm(datasets, outputs)
+        e = time.time()
+        clock("ALIGNMENT", outputs, s, e=e)
+
+    if prc["imagegen"]:
+        s = time.time()
+        clock("IMAGE GENERATION", s)
+        for dataset in tqdm(datasets):
+            generate_images()
+        e = time.time()
+        clock("IMAGE GENERATION", outputs, s, e=e)
+
+def run_pipe_flow(datasets, outputs, prc, cfg):
+    s = time.time()
+    clock("", s)
+    for dataset in tqdm(datasets):
+        if prc["crpt"]:
+            if selector == "multi":
+                all_permutations(dataset, outputs)
+            elif selector == "mfi":
+                multiple_permutations(dataset, expo, mode, outputs, thresh=args.threshold)
+            elif selector in ["rex", "rfi"]:
+                artificial_misalignment(dataset, selector, outputs)
+        if prc["runsvm"]:
+            run_svm(dataset, outputs)
+        if prc["imagegen"]:
+            generate_images(dataset)
+    e = time.time()
+    clock("IMAGE GENERATION", outputs, s, e=e)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog="MosaicML", usage="python corrupt.py j8ep07 mfi -e=sub -m=stat")
     parser.add_argument("srcpath", type=str, help="parent directory of single visit datasets")
@@ -279,20 +344,28 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--pattern", type=str, default="*", help="glob search pattern - default is wildcard *")
     parser.add_argument("-e", "--exposures", type=str, choices=["all", "sub"], default="all", help="all or subset of exposures")
     parser.add_argument("-m", "--mode", type=str, choices=["stat", "stoc"], default="stoc", help="apply consistent (static) or randomly varying (stochastic) corruptions to each exposure")
-    parser.add_argument("-l", "--level", type=str, choices=["major", "standard", "minor", "any"], default="any", help="lambda relative error level")
+    parser.add_argument("-t", "--threshold", type=str, choices=["major", "standard", "minor", "any"], default="any", help="lambda relative error threshold")
+    parser.add_argument("-w", "--workflow", type=str, choices=["batch", "pipeline"], default="batch", help="batch: run all datasets through one process before starting next; pipeline: run each dataset through entire workflow one at a time")
+    parser.add_argument("-c", "--crpt", type=int, choices=[0, 1], default=1, help="run corruption workflow")
+    parser.add_argument("-r", "--runsvm", type=int, choices=[0, 1], default=0, help="run svm drizzle workflow")
+    parser.add_argument("-i", "--imagegen", type=int, choices=[0, 1], default=0, help="run imagegen workflow")
     # get user-defined args and/or set defaults
     args = parser.parse_args()
-    srcpath, outputs, selector =  args.srcpath, args.outputs, args.selector
-    pattern, expo, mode = args.pattern, args.exposures, args.mode
+    srcpath, outputs, pattern = args.srcpath, args.outputs, args.pattern
+    selector, workflow = args.selector, args.workflow
+    expo, mode = args.exposures, args.mode
+    crpt, runsvm, imagegen = args.synth, args.runsvm, args.imagegen
     datasets = glob.glob(f"{srcpath}/{pattern}")
     if len(datasets) < 1:
         print("No datasets found matching the search pattern.")
         sys.exit(1)
     else:
-        for dataset in tqdm(datasets):
-            if selector == "multi":
-                all_permutations(dataset, outputs)
-            elif selector == "mfi":
-                multiple_permutations(dataset, expo, mode, outputs, level=args.level)
-            elif selector in ["rex", "rfi"]:
-                artificial_misalignment(dataset, selector, outputs)
+        procs = dict(crpt=crpt, runsvm=runsvm, imagegen=imagegen)
+        config = dict(selector=selector, expo=expo, mode=mode)
+        if workflow == "batch":
+            run_batch_flow(datasets, outputs, procs, config)
+        else:
+            run_pipe_flow(datasets, outputs, procs, config)
+
+        
+            

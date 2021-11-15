@@ -1,10 +1,16 @@
 #!/bin/bash -xu
 export SVM_QUALITY_TESTING=on
 # sh svm-synthesize.sh CRPT=1 DRIZ=1 DRAW=1 DATA=1
-CRPT=${1:-""}
-DRIZ=${2:-""}
-DRAW=${3:-""}
-DATA=${4:-""}
+# Run SVM only: bash svm-synthesize.sh 0 1 0 0
+# Draw Images only bash svm-synthesize.sh 0 0 1 0
+# CRPT=${1:-""}
+# DRIZ=${2:-""}
+# DRAW=${3:-""}
+# DATA=${4:-""}
+CRPT=${CRPT:-""}
+DRIZ=${DRIZ:-""}
+DRAW=${DRAW:-""}
+DATA=${DATA:-""}
 
 #DATASETS=${DATASETS:-""} # ('icon04')
 SRC=${SRC:-"data/singlevisits"} # data/singlevisits/results_2021-07-28
@@ -63,7 +69,7 @@ fi
 # draw png images
 if [[ $DRAW -ne 0 ]]; then
     mkdir -p $img
-    python make_images.py $synthetic -o=$img -c=1
+    python make_images.py $synthetic $img -c=1
 fi
 
 # make dataset

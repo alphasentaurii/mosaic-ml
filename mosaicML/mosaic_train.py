@@ -1,6 +1,6 @@
 import os
+import sys
 import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 import argparse
@@ -62,14 +62,18 @@ def make_image_sets(X_train, X_test, X_val, img_path='.', w=128, h=128, d=9, exp
     return train, test, val
 
 
-def save_model(model, name=None, weights=True):
+def save_model(model, name=None, weights=True, path="./models"):
     """The model architecture, and training configuration (including the optimizer, losses, and metrics)
     are stored in saved_model.pb. The weights are saved in the variables/ directory."""
     if name is None:
-        model_name = str(model.name_scope().rstrip("/").upper())
+        name = str(model.name_scope().rstrip("/").upper())
         datestamp = dt.datetime.now().isoformat().split('T')[0]
-        name = f"{model_name}_{datestamp}"
-    model_path = os.path.join(f"./models", name)
+        model_name = f"{name}_{datestamp}"
+    else:
+        model_name = name
+    if path == "":
+        path = "./models"
+    model_path = os.path.join(path, model_name)
     weights_path = f"{model_path}/weights/ckpt"
     model.save(model_path)
     if weights is True:
@@ -81,7 +85,7 @@ def save_model(model, name=None, weights=True):
             print("{}{}".format(indent + "    ", filename))
 
 
-def save_to_pickle(data_dict, res_path=f'./results/mlp'):
+def save_to_pickle(data_dict, res_path=f'./results/ensemble'):
     keys = []
     for k, v in data_dict.items():
         if res_path is not None:
@@ -125,8 +129,11 @@ def make_ensembles(train_img, test_img, val_img, train_data, test_data, val_data
     return XTR, YTR, XTS, YTS, XVL, YVL
 
 
-def preprocess_data(filename, img_path):
+def preprocess_data(filename, img_path, synth=None, norm=False):
     df = pd.read_csv(filename, index_col='index')
+    if synth:
+        syn = pd.read_csv(synth, index_col="index")
+        df = pd.concat([df, syn], axis=0)
     X_train, X_test, X_val, y_train, y_test, y_val = split_datasets(df)
     # IMG DATA
     image_sets = [X_train, X_test, X_val]
@@ -134,7 +141,7 @@ def preprocess_data(filename, img_path):
 
     # MLP DATA
     X_train_1, _ = training_data_aug(X_train, X_test, X_val, y_train, y_test, y_val)
-    if NORM:
+    if norm:
         # train_norm, test_norm, val_norm
         X_train_1, X_test, X_val = normalize_data(df, X_train_1, X_test, X_val)
     
@@ -146,12 +153,14 @@ def preprocess_data(filename, img_path):
     return index, XTR, YTR, XTS, YTS, XVL, YVL, y_val
 
 
-def train_model(XTR, YTR, XTS, YTS, name='ensemble4d', params=dict(batch_size=32, epochs=60, lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=1, ensemble=True)):
+def train_model(XTR, YTR, XTS, YTS, name, params=dict(batch_size=32, epochs=60, lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=1, ensemble=True)):
     ens = Builder(XTR, YTR, XTS, YTS, **params)
+    name, path = os.path.basename(name), os.path.dirname(name)
+    ens.name = name
     ens.build_ensemble(lr_sched=True)
     ens.fit_generator()
     ens_model = ens.model
-    save_model(ens_model, name=name, weights=True)
+    save_model(ens_model, name=name, weights=True, path=path)
     ens_history = ens.history
     return ens_model, ens_history
 
@@ -163,15 +172,14 @@ def evaluate_results(ens_model, ens_history, XTR, YTR, XTS, YTS, test_idx):
     com.scores = com.compute_scores()
     com.test_idx = test_idx #y_test
     com.fnfp = com.track_fnfp()
-    predictions = {"y_onehot": com.y_onehot, "preds": com.preds,
-                "y_pred": com.y_pred}
+    predictions = {"y_onehot": com.y_onehot, "preds": com.preds, "y_pred": com.y_pred}
     com.results = {
         "history": ens_history.history, "predictions": predictions,  
         "plots": com.plots, "scores": com.scores, 
         "fnfp": com.fnfp, "test_idx": com.test_idx
         }
-    ensemble_keys = save_to_pickle(com.results, res_path=f'./results/ensemble')
-    return ensemble_keys
+    
+    return com
 
 
 def run_validation(ens_model, ens_history, XTS, YTS, XVL, YVL, val_idx):
@@ -191,25 +199,49 @@ def run_validation(ens_model, ens_history, XTS, YTS, XVL, YVL, val_idx):
         "plots": eval.plots, "scores": eval.scores, 
         "fnfp": eval.fnfp, "test_idx": eval.test_idx
         }
-    validation_keys = save_to_pickle(eval.results, res_path=f'./results/ensemble/validation')
-    return validation_keys
+    return eval
 
+
+def main(training_data, img_path, synth_data, norm, model_name, params, results, validate):
+    index, XTR, YTR, XTS, YTS, XVL, YVL, y_val = preprocess_data(training_data, img_path, synth=synth_data, norm=norm)
+    ens_model, ens_history = train_model(XTR, YTR, XTS, YTS, model_name, params)
+    # test_idx = index[1]
+    res_path = results + '/' + model_name.split('/')[-1]
+    com = evaluate_results(ens_model, ens_history, XTR, YTR, XTS, YTS, index[1])
+    save_to_pickle(com.results, res_path=res_path)
+    if validate:
+        eval = run_validation(ens_model, ens_history, XTS, YTS, XVL, YVL, y_val)
+        save_to_pickle(eval.results, res_path=res_path)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("filename", type=str, default="ml_data/svm_cleaned.csv", help="path to training data csv file(s)")
-    parser.add_argument("img_path", type=str, default="ml_data/img/total", help="path to training image directory")
-    parser.add_argument("-m", "--model_path", type=str, default="./models/ensemble", help="path to save model")
+    parser = argparse.ArgumentParser(usage="python mosaic_train.py training_data.csv path/to/img -m=svm_ensemble")
+    parser.add_argument("training_data", type=str, help="path to training data csv file(s)")
+    parser.add_argument("img_path", type=str, help="path to training image directory")
+    parser.add_argument("-m", "--model_name", type=str, default="models/svm_ensemble", help="filename path for saving model")
+    parser.add_argument("-r", "--results", type=str, default="results", help="path to save training results")
+    parser.add_argument("-s", "--synthetic_data", type=str, default=None, help="path to synthetic/corruption csv file (if saved separately)")
     parser.add_argument("-n", "--normalize", type=str, default=0, help="apply normalization and scaling to regression test data")
-    parser.add_argument("-c", "--corruption_data", type=str, default=None, help="corruption dataframe (csv file) if saved separately")
+    parser.add_argument("-b", "--batchsize", type=int, default=32, help="batch_size")
+    parser.add_argument("-e", "--epochs", type=int, default=60, help="number of epochs")
+    parser.add_argument("-y", "--early_stopping", type=str, default=None, help="early stopping")
+    parser.add_argument("-v", "--validation", type=int, default=1, help="validate model with 10pct of training date")
     args = parser.parse_args()
-    filename = args.filename
+    training_data = args.training_data
     img_path = args.img_path
-    model_path = args.model_path
-    NORM = args.normalization
+    model_name = args.model_name
+    if os.path.exists(f"{model_name}"):
+        print(f"{model_name} already exists - delete it or use a different name.")
+        sys.exit(1)
+    results = args.results
+    synth_data = args.synthetic_data
+    norm = args.normalize
+    validate = args.validate
+    # SET MODEL FIT PARAMS
+    BATCHSIZE = args.batchsize
+    EPOCHS = args.epochs
+    EARLY = args.early_stopping
+    params=dict(batch_size=BATCHSIZE, epochs=EPOCHS, lr=1e-4, decay=[100000, 0.96], early_stopping=EARLY, verbose=2, ensemble=True)
 
-    index, XTR, YTR, XTS, YTS, XVL, YVL, y_val = preprocess_data(filename, img_path)
-    ens_model, ens_history = train_model(XTR, YTR, XTS, YTS, name='ensemble4d', params=dict(batch_size=32, epochs=60, lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=2, ensemble=True))
-    # test_idx = index[1]
-    ensemble_keys = evaluate_results(ens_model, ens_history, XTR, YTR, XTS, YTS, index[1])
-    validation_keys = run_validation(ens_model, ens_history, XTS, YTS, XVL, YVL, y_val)
+    main(training_data, img_path, synth_data, norm, model_name, params, results, validate)
+
+

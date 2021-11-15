@@ -86,7 +86,7 @@ python mosaic_predict.py svm_unlabeled.csv path/to/png/images -m=models/ensemble
 
 ```bash
 # Create/Import the regression test data
-$ python make_dataset.py train_mosaic.h5 -d=path/to/datasets -o=data/train_mosaic.csv
+$ python make_dataset.py train_svm.h5 -d=path/to/datasets -o=data/train_mosaic.csv
 # Create total detection image sets
 $ python make_images.py path/to/datasets -o=path/to/save/images
 ```

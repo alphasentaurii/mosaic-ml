@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-bright')
 font_dict={'family':'"Titillium Web", monospace','size':16}
 mpl.rc('font',**font_dict)
-import plotly.express as px
 import plotly.graph_objs as go
 from plotly import subplots
 import plotly.offline as pyo
@@ -17,7 +16,6 @@ from keras.preprocessing import image
 
 
 from augment import apply_power_transform
-
 
 
 HOME = os.path.abspath(os.curdir)

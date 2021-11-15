@@ -1,7 +1,7 @@
 # Copyright (c) Association of Universities for Research in Astronomy
 # Distributed under the terms of the Modified BSD License.
 # DATB's HST CAL code build for fundamental calibration s/w
-ARG CAL_BASE_IMAGE="stsci/hst-pipeline:CALDP_drizzlecats_CAL_rc5"
+ARG CAL_BASE_IMAGE="stsci/hst-pipeline:CALDP_drizzlecats_CAL_rc6"
 FROM ${CAL_BASE_IMAGE}
 
 LABEL maintainer="dmd_octarine@stsci.edu" \
