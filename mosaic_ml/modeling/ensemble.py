@@ -3,14 +3,16 @@ import os
 import sys
 import pandas as pd
 import numpy as np
+import pickle
 import time
 import datetime as dt
 from tensorflow.keras.optimizers import Adam
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-plt.style.use('seaborn-bright')
-font_dict={'family':'"Titillium Web", monospace','size':16}
-mpl.rc('font',**font_dict)
+
+plt.style.use("seaborn-bright")
+font_dict = {"family": '"Titillium Web", monospace', "size": 16}
+mpl.rc("font", **font_dict)
 import plotly.graph_objects as go
 import itertools
 from tensorflow.keras.models import Sequential, Model, load_model
@@ -19,16 +21,17 @@ from tensorflow.keras.layers import Dense, Input, concatenate
 from keras.layers import Dense
 
 from sklearn.metrics import (
-    roc_curve, 
-    roc_auc_score, 
-    precision_recall_curve, 
+    roc_curve,
+    roc_auc_score,
+    precision_recall_curve,
     average_precision_score,
     classification_report,
-    confusion_matrix
-    )
-# mosaicML modules
-from preprocessing.augment import augment_data, augment_image
+    confusion_matrix,
+)
 
+# mosaic_ml modules
+from preprocessing.augment import augment_data, augment_image
+from utilities.timer import clocklog
 
 DIM = 3
 CH = 3
@@ -39,35 +42,23 @@ SHAPE = (DIM, WIDTH, HEIGHT, CH)
 TF_CPP_MIN_LOG_LEVEL = 2
 
 
-def proc_time(start, end):
-    duration = np.round((end - start), 2)
-    proc_time = np.round((duration / 60), 2)
-    if duration > 3600:
-        t = f"{np.round((proc_time / 60), 2)} hours."
-    elif duration > 60:
-        t = f"{proc_time} minutes."
-    else:
-        t = f"{duration} seconds."
-    print(f"Process took {t}\n")
-
-
-def print_timestamp(ts, name, value):
-    if value == 0:
-        info = "STARTED"
-    elif value == 1:
-        info = "FINISHED"
-    else:
-        info = ""
-    timestring = dt.datetime.fromtimestamp(ts).strftime("%m/%d/%Y - %H:%M:%S")
-    print(f"{info} [{name}]: {timestring}")
-
-
 class Builder:
-    def __init__(self, X_train, y_train, X_test, y_test, batch_size=32, epochs=60, 
-                 lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=2, 
-                 ensemble=True):
+    def __init__(
+        self,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        batch_size=32,
+        epochs=60,
+        lr=1e-4,
+        decay=[100000, 0.96],
+        early_stopping=None,
+        verbose=2,
+        ensemble=True,
+    ):
         self.X_train = X_train
-        self.X_test = X_test 
+        self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
         self.batch_size = batch_size
@@ -84,18 +75,16 @@ class Builder:
         self.history = None
         self.name = None
 
-
     def decay_learning_rate(self):
         """set learning schedule with exponential decay
         lr (initial learning rate: 1e-4
         decay: [decay_steps, decay_rate]
         """
         lr_schedule = optimizers.schedules.ExponentialDecay(
-            self.lr, decay_steps=self.decay[0], decay_rate=self.decay[1],
-            staircase=True
-            )
+            self.lr, decay_steps=self.decay[0], decay_rate=self.decay[1], staircase=True
+        )
         return lr_schedule
-    
+
     def set_callbacks(self):
         """
         early_stopping: 'val_accuracy' or 'val_loss'
@@ -103,10 +92,10 @@ class Builder:
         model_name = str(self.model.name_scope().rstrip("/").upper())
         checkpoint_cb = callbacks.ModelCheckpoint(
             f"{model_name}_checkpoint.h5", save_best_only=True
-            )
+        )
         early_stopping_cb = callbacks.EarlyStopping(
             monitor=self.early_stopping, patience=15
-            )
+        )
         self.callbacks = [checkpoint_cb, early_stopping_cb]
         return self.callbacks
 
@@ -117,7 +106,9 @@ class Builder:
         # visible layer
         inputs = Input(shape=(input_shape,), name="svm_inputs")
         # hidden layers
-        x = Dense(layers[0], activation="leaky_relu", name=f"1_dense{layers[0]}")(inputs)
+        x = Dense(layers[0], activation="leaky_relu", name=f"1_dense{layers[0]}")(
+            inputs
+        )
         for i, layer in enumerate(layers[1:]):
             i += 1
             x = Dense(layer, activation="leaky_relu", name=f"{i+1}_dense{layer}")(x)
@@ -132,9 +123,11 @@ class Builder:
                 lr_schedule = self.decay_learning_rate()
             else:
                 lr_schedule = self.lr
-            self.model.compile(loss="binary_crossentropy", 
-                            optimizer=Adam(learning_rate=lr_schedule), 
-                            metrics=["accuracy"])
+            self.model.compile(
+                loss="binary_crossentropy",
+                optimizer=Adam(learning_rate=lr_schedule),
+                metrics=["accuracy"],
+            )
             return self.model
 
     def build_cnn(self, input_shape=None, lr_sched=True):
@@ -142,31 +135,39 @@ class Builder:
         if input_shape is None:
             input_shape = self.X_train.shape[1:]
 
-        inputs = Input(input_shape, name='img3d_inputs')
+        inputs = Input(input_shape, name="img3d_inputs")
 
-        x = layers.Conv3D(filters=32, kernel_size=3, padding="same", 
-                          data_format="channels_last", 
-                          activation="leaky_relu")(inputs)
+        x = layers.Conv3D(
+            filters=32,
+            kernel_size=3,
+            padding="same",
+            data_format="channels_last",
+            activation="leaky_relu",
+        )(inputs)
         x = layers.MaxPool3D(pool_size=2)(x)
         x = layers.BatchNormalization()(x)
 
-        x = layers.Conv3D(filters=32, kernel_size=3, padding="same", 
-                          activation="leaky_relu")(x)
+        x = layers.Conv3D(
+            filters=32, kernel_size=3, padding="same", activation="leaky_relu"
+        )(x)
         x = layers.MaxPool3D(pool_size=1)(x)
         x = layers.BatchNormalization()(x)
 
-        x = layers.Conv3D(filters=64, kernel_size=3, padding="same", 
-                          activation="leaky_relu")(x)
+        x = layers.Conv3D(
+            filters=64, kernel_size=3, padding="same", activation="leaky_relu"
+        )(x)
         x = layers.MaxPool3D(pool_size=1)(x)
         x = layers.BatchNormalization()(x)
 
-        x = layers.Conv3D(filters=128, kernel_size=3, padding="same", 
-                          activation="leaky_relu")(x)
+        x = layers.Conv3D(
+            filters=128, kernel_size=3, padding="same", activation="leaky_relu"
+        )(x)
         x = layers.MaxPool3D(pool_size=1)(x)
         x = layers.BatchNormalization()(x)
 
-        x = layers.Conv3D(filters=256, kernel_size=3, padding="same",
-                          activation="leaky_relu")(x)
+        x = layers.Conv3D(
+            filters=256, kernel_size=3, padding="same", activation="leaky_relu"
+        )(x)
         x = layers.MaxPool3D(pool_size=1)(x)
         x = layers.BatchNormalization()(x)
 
@@ -178,17 +179,20 @@ class Builder:
             self.cnn = Model(inputs, x, name="cnn_ensemble")
             return self.cnn
         else:
-            outputs = layers.Dense(units=1, activation="sigmoid", name="img3d_output")(x)
+            outputs = layers.Dense(units=1, activation="sigmoid", name="img3d_output")(
+                x
+            )
             # Define the model.
             if lr_sched is True:
                 lr_schedule = self.decay_learning_rate()
             else:
                 lr_schedule = self.lr
             self.model = Model(inputs, outputs, name="cnn3d")
-            self.model.compile(loss="binary_crossentropy", 
-                        optimizer=Adam(learning_rate=lr_schedule),
-                        metrics=["accuracy"]
-                        )
+            self.model.compile(
+                loss="binary_crossentropy",
+                optimizer=Adam(learning_rate=lr_schedule),
+                metrics=["accuracy"],
+            )
             return self.model
 
     def build_ensemble(self, lr_sched=True):
@@ -199,61 +203,70 @@ class Builder:
         combinedInput = concatenate([self.mlp.output, self.cnn.output])
         x = Dense(9, activation="leaky_relu", name="combined_input")(combinedInput)
         x = Dense(1, activation="sigmoid", name="ensemble_output")(x)
-        self.model = Model(inputs=[self.mlp.input, self.cnn.input], outputs=x, name=self.name)
+        self.model = Model(
+            inputs=[self.mlp.input, self.cnn.input], outputs=x, name=self.name
+        )
         if lr_sched is True:
             lr_schedule = self.decay_learning_rate()
         else:
             lr_schedule = self.lr
-        self.model.compile(loss="binary_crossentropy", 
-                            optimizer=Adam(learning_rate=lr_schedule), 
-                            metrics=["accuracy"])
+        self.model.compile(
+            loss="binary_crossentropy",
+            optimizer=Adam(learning_rate=lr_schedule),
+            metrics=["accuracy"],
+        )
         return self.model
-
 
     def batch_maker(self):
         """
-        Gives equal number of positive and negative samples rotating randomly                
+        Gives equal number of positive and negative samples rotating randomly
         The output of the generator must be either
         - a tuple `(inputs, targets)`
         - a tuple `(inputs, targets, sample_weights)`.
 
         This tuple (a single output of the generator) makes a single
-        batch. The last batch of the epoch is commonly smaller than the others, 
+        batch. The last batch of the epoch is commonly smaller than the others,
         if the size of the dataset is not divisible by the batch size.
-        The generator loops over its data indefinitely. 
+        The generator loops over its data indefinitely.
         An epoch finishes when `steps_per_epoch` batches have been seen by the model.
-        
+
         """
         # hb: half-batch
         hb = self.batch_size // 2
         # Returns a new array of given shape and type, without initializing.
         # x_train.shape = (2016, 3, 128, 128, 3)
         if len(self.X_train.shape) == 2:
-            xb = np.empty((self.batch_size, self.X_train.shape[1]), dtype='float32')
+            xb = np.empty((self.batch_size, self.X_train.shape[1]), dtype="float32")
             augmenter = augment_data
         else:
-            xb = np.empty((self.batch_size, self.X_train.shape[1], 
-                        self.X_train.shape[2], self.X_train.shape[3],
-                        self.X_train.shape[4]), 
-                        dtype='float32')
+            xb = np.empty(
+                (
+                    self.batch_size,
+                    self.X_train.shape[1],
+                    self.X_train.shape[2],
+                    self.X_train.shape[3],
+                    self.X_train.shape[4],
+                ),
+                dtype="float32",
+            )
             augmenter = augment_image
-        
-        #y_train.shape = (2016, 1)
-        yb = np.empty((self.batch_size, self.y_train.shape[1]), dtype='float32')
-        
-        pos = np.where(self.y_train[:,0] == 1.)[0]
-        neg = np.where(self.y_train[:,0] == 0.)[0]
+
+        # y_train.shape = (2016, 1)
+        yb = np.empty((self.batch_size, self.y_train.shape[1]), dtype="float32")
+
+        pos = np.where(self.y_train[:, 0] == 1.0)[0]
+        neg = np.where(self.y_train[:, 0] == 0.0)[0]
 
         # rotating each of the samples randomly
         while True:
             np.random.shuffle(pos)
             np.random.shuffle(neg)
-        
+
             xb[:hb] = self.X_train[pos[:hb]]
-            xb[hb:] = self.X_train[neg[hb:self.batch_size]]
+            xb[hb:] = self.X_train[neg[hb : self.batch_size]]
             yb[:hb] = self.y_train[pos[:hb]]
-            yb[hb:] = self.y_train[neg[hb:self.batch_size]]
-        
+            yb[hb:] = self.y_train[neg[hb : self.batch_size]]
+
             for i in range(self.batch_size):
                 xb[i] = augmenter(xb[i])
 
@@ -261,36 +274,41 @@ class Builder:
 
     def batch_ensemble(self):
         """
-        Gives equal number of positive and negative samples rotating randomly                
+        Gives equal number of positive and negative samples rotating randomly
         The output of the generator must be either
         - a tuple `(inputs, targets)`
         - a tuple `(inputs, targets, sample_weights)`.
 
         This tuple (a single output of the generator) makes a single
-        batch. The last batch of the epoch is commonly smaller than the others, 
+        batch. The last batch of the epoch is commonly smaller than the others,
         if the size of the dataset is not divisible by the batch size.
-        The generator loops over its data indefinitely. 
+        The generator loops over its data indefinitely.
         An epoch finishes when `steps_per_epoch` batches have been seen by the model.
-        
+
         """
         # hb: half-batch
         hb = self.batch_size // 2
         # Returns a new array of given shape and type, without initializing.
         # x_train.shape = (2016, 3, 128, 128, 3)
-        
-        xa = np.empty((self.batch_size, self.X_train[0].shape[1]), dtype='float32')
-        
-        xb = np.empty((self.batch_size, self.X_train[1].shape[1], 
-                        self.X_train[1].shape[2], self.X_train[1].shape[3],
-                        self.X_train[1].shape[4]), 
-                        dtype='float32')
-        
-        
-        #y_train.shape = (2016, 1)
-        yb = np.empty((self.batch_size, self.y_train.shape[1]), dtype='float32')
-        
-        pos = np.where(self.y_train[:,0] == 1.)[0]
-        neg = np.where(self.y_train[:,0] == 0.)[0]
+
+        xa = np.empty((self.batch_size, self.X_train[0].shape[1]), dtype="float32")
+
+        xb = np.empty(
+            (
+                self.batch_size,
+                self.X_train[1].shape[1],
+                self.X_train[1].shape[2],
+                self.X_train[1].shape[3],
+                self.X_train[1].shape[4],
+            ),
+            dtype="float32",
+        )
+
+        # y_train.shape = (2016, 1)
+        yb = np.empty((self.batch_size, self.y_train.shape[1]), dtype="float32")
+
+        pos = np.where(self.y_train[:, 0] == 1.0)[0]
+        neg = np.where(self.y_train[:, 0] == 0.0)[0]
 
         # rotating each of the samples randomly
         while True:
@@ -298,12 +316,12 @@ class Builder:
             np.random.shuffle(neg)
 
             xa[:hb] = self.X_train[0][pos[:hb]]
-            xa[hb:] = self.X_train[0][neg[hb:self.batch_size]]
+            xa[hb:] = self.X_train[0][neg[hb : self.batch_size]]
             xb[:hb] = self.X_train[1][pos[:hb]]
-            xb[hb:] = self.X_train[1][neg[hb:self.batch_size]]
+            xb[hb:] = self.X_train[1][neg[hb : self.batch_size]]
             yb[:hb] = self.y_train[pos[:hb]]
-            yb[hb:] = self.y_train[neg[hb:self.batch_size]]
-        
+            yb[hb:] = self.y_train[neg[hb : self.batch_size]]
+
             for i in range(self.batch_size):
                 xa[i] = augment_data(xa[i])
                 xb[i] = augment_image(xb[i])
@@ -313,7 +331,7 @@ class Builder:
     def fit_generator(self):
         """
         Fits cnn and returns keras history
-        Gives equal number of positive and negative samples rotating randomly  
+        Gives equal number of positive and negative samples rotating randomly
         """
         model_name = str(self.model.name_scope().rstrip("/").upper())
         print(f"FITTING MODEL...")
@@ -322,48 +340,75 @@ class Builder:
         if self.early_stopping is not None:
             self.callbacks = self.set_callbacks()
 
-        t_start = time.time()
-        start = dt.datetime.fromtimestamp(t_start).strftime("%m/%d/%Y - %I:%M:%S %p")
-        print(f"\nTRAINING STARTED: {start} ***{model_name}***")
+        start = time.time()
+        clocklog(f"TRAINING ***{model_name}***", t0=start)
 
         if self.ensemble is True:
             make_batches = self.batch_ensemble()
-            steps_per_epoch = (self.X_train[0].shape[0]//self.batch_size)
+            steps_per_epoch = self.X_train[0].shape[0] // self.batch_size
         else:
             make_batches = self.batch_maker()
-            steps_per_epoch = (self.X_train.shape[0]//self.batch_size)
+            steps_per_epoch = self.X_train.shape[0] // self.batch_size
 
-        self.history = self.model.fit(make_batches, validation_data=validation_data, 
-                            verbose=self.verbose, epochs=self.epochs,
-                            steps_per_epoch=steps_per_epoch,
-                            callbacks=self.callbacks)
-        t_end = time.time()
-        end = dt.datetime.fromtimestamp(t_end).strftime("%m/%d/%Y - %I:%M:%S %p")
-        print(f"\nTRAINING COMPLETE: {end} ***{model_name}***")
-        proc_time(t_start, t_end)
+        self.history = self.model.fit(
+            make_batches,
+            validation_data=validation_data,
+            verbose=self.verbose,
+            epochs=self.epochs,
+            steps_per_epoch=steps_per_epoch,
+            callbacks=self.callbacks,
+        )
+        end = time.time()
+        clocklog(f"TRAINING ***{model_name}***", t0=start, t1=end)
         self.model.summary()
         return self.history
 
 
 class Remodel(Builder):
-    def __init__(self, model_path, X_train, y_train, X_test, y_test, batch_size=32, epochs=60, 
-                 lr=1e-4, decay=[100000, 0.96], early_stopping=None, verbose=2, 
-                 ensemble=True):
-        super().__init__(X_train, y_train, X_test, y_test, batch_size, epochs, 
-                 lr, decay, early_stopping, verbose, ensemble)
+    def __init__(
+        self,
+        model_path,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        batch_size=32,
+        epochs=60,
+        lr=1e-4,
+        decay=[100000, 0.96],
+        early_stopping=None,
+        verbose=2,
+        ensemble=True,
+    ):
+        super().__init__(
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            batch_size,
+            epochs,
+            lr,
+            decay,
+            early_stopping,
+            verbose,
+            ensemble,
+        )
         self.model_path = model_path
         self.model = None
 
     def load_saved_model(self):
         model = load_model(self.model_path)
         self.model = Model(inputs=model.inputs, outputs=model.outputs)
-        self.model.compile(loss="binary_crossentropy", optimizer=Adam(learning_rate=self.decay_learning_rate()), metrics=["accuracy"])
+        self.model.compile(
+            loss="binary_crossentropy",
+            optimizer=Adam(learning_rate=self.decay_learning_rate()),
+            metrics=["accuracy"],
+        )
         return self
 
 
 class Computer:
-
-    def __init__(self, model_name, compute, classes): #="ENSEMBLE_SVM", ="test"
+    def __init__(self, model_name, compute, classes):
         self.model_name = model_name
         self.compute = compute
         self.classes = classes
@@ -399,40 +444,40 @@ class Computer:
         self.y_test = y_test
         self.test_idx = test_idx
         return self
-    
+
     def store_results(self):
         # model_name, compute, training_date, etc
         outputs = {
-            "predictions" : {
-                "y_onehot": self.y_onehot, 
-                "y_scores": self.y_scores, 
+            "predictions": {
+                "y_onehot": self.y_onehot,
+                "y_scores": self.y_scores,
                 "y_pred": self.y_pred,
                 "cmx": self.cmx,
                 "cmx_norm": self.cmx_norm,
-                "fnfp": self.fnfp
+                "fnfp": self.fnfp,
             },
-            "scores" : {
-                "roc_auc": self.roc_auc,  
-                "acc_loss": self.acc_loss, 
-                "report": self.report
-                }
+            "scores": {
+                "roc_auc": self.roc_auc,
+                "acc_loss": self.acc_loss,
+                "report": self.report,
+            },
         }
         if self.compute == "val":
             outputs["plots"] = {
-                "roc_fig": self.roc_fig, 
-                "pr_fig": self.pr_fig, 
+                "roc_fig": self.roc_fig,
+                "pr_fig": self.pr_fig,
                 "cm_fig": self.cm_fig,
-                }
+            }
         else:
             outputs["plots"] = {
-                "keras_acc": self.acc_fig, 
-                "keras_loss": self.loss_fig, 
-                "roc_fig": self.roc_fig, 
-                "pr_fig": self.pr_fig, 
+                "keras_acc": self.acc_fig,
+                "keras_loss": self.loss_fig,
+                "roc_fig": self.roc_fig,
+                "pr_fig": self.pr_fig,
                 "cm_fig": self.cm_fig,
-                }
+            }
         return outputs
-    
+
     def download(self):
         outputs = self.store_results()
         if self.res_path is None:
@@ -449,7 +494,6 @@ class Computer:
             sys.stdout = f
             print(self.report)
             sys.stdout = out
-    
 
     def upload(self):
         if self.res_path is None:
@@ -465,36 +509,35 @@ class Computer:
             print(f"No results found @ {self.res_path}")
         return self
 
-
     def outputs(self, res):
-        self.y_onehot = res['predictions']['y_onehot']
-        self.y_scores = res['predictions']['y_scores']
-        self.y_pred = res['predictions']['y_pred']
-        self.cmx = res['predictions']['cmx']
-        self.cmx_norm = res['predictions']['cmx_norm']
-        self.fnfp = res['predictions']['fnfp']
-        #self.report = res['scores']['report']
-        self.roc_auc = res['scores']['roc_auc']
-        self.acc_loss = res['scores']['acc_loss']
-        self.roc_fig = res['plots']['roc_fig']
-        self.pr_fig = res['plots']['pr_fig']
-        self.cm_fig = res['plots']['cm_fig']
+        self.y_onehot = res["predictions"]["y_onehot"]
+        self.y_scores = res["predictions"]["y_scores"]
+        self.y_pred = res["predictions"]["y_pred"]
+        self.cmx = res["predictions"]["cmx"]
+        self.cmx_norm = res["predictions"]["cmx_norm"]
+        self.fnfp = res["predictions"]["fnfp"]
+        # self.report = res['scores']['report']
+        self.roc_auc = res["scores"]["roc_auc"]
+        self.acc_loss = res["scores"]["acc_loss"]
+        self.roc_fig = res["plots"]["roc_fig"]
+        self.pr_fig = res["plots"]["pr_fig"]
+        self.cm_fig = res["plots"]["cm_fig"]
         if self.compute == "test":
-            self.acc_fig = res['plots']['acc_fig']
-            self.loss_fig = res['plots']['loss_fig']
+            self.acc_fig = res["plots"]["acc_fig"]
+            self.loss_fig = res["plots"]["loss_fig"]
         with open(f"{self.res_path}/metrics_report.txt", "r") as f:
             self.report = f.read()
         return self
-    
-
 
     """ MODEL PERFORMANCE METRICS """
+
     def calculate_results(self, show_summary=True):
         self.y_onehot = self.onehot_y()
         self.y_scores = self.score_y()
         self.y_pred = self.y_scores[:, 1]
-        self.report = classification_report(self.y_test, self.y_pred, labels=[0,1], 
-                                    target_names=self.classes)
+        self.report = classification_report(
+            self.y_test, self.y_pred, labels=[0, 1], target_names=self.classes
+        )
         self.roc_auc = roc_auc_score(self.y_test, self.y_pred)
         self.acc_loss = self.acc_loss_scores()
         self.cmx = confusion_matrix(self.y_test, self.y_pred)
@@ -508,10 +551,12 @@ class Computer:
     def onehot_y(self):
         self.y_onehot = pd.get_dummies(self.y_test.ravel(), prefix="lab")
         return self.y_onehot
-    
+
     def score_y(self):
         y_scores = self.model.predict(self.X_test)
-        self.y_scores = np.concatenate([np.round(1-y_scores), np.round(y_scores)], axis=1)
+        self.y_scores = np.concatenate(
+            [np.round(1 - y_scores), np.round(y_scores)], axis=1
+        )
         return self.y_scores
 
     def acc_loss_scores(self):
@@ -522,11 +567,11 @@ class Computer:
         test_acc = np.round(test_scores[1], 2)
         test_loss = np.round(test_scores[0], 2)
         self.acc_loss = {
-            "train_acc": train_acc, 
-            "train_loss": train_loss, 
-            "test_acc": test_acc, 
-            "test_loss": test_loss
-            }
+            "train_acc": train_acc,
+            "train_loss": train_loss,
+            "test_acc": test_acc,
+            "test_loss": test_loss,
+        }
         return self.acc_loss
 
     def track_fnfp(self):
@@ -536,20 +581,22 @@ class Computer:
         try:
             conf_idx = np.where(self.y_pred != self.test_idx.values)
         except AttributeError as e:
-            print(f"Test/Val Index should be a pandas series, not {type(self.test_idx)}")
+            print(
+                f"Test/Val Index should be a pandas series, not {type(self.test_idx)}"
+            )
             print(e)
             return
-        pred_proba = np.asarray(self.model.predict(self.X_test).flatten(), 'float32')
+        pred_proba = np.asarray(self.model.predict(self.X_test).flatten(), "float32")
         conf_proba = pred_proba[conf_idx]
         fn_idx = self.test_idx.iloc[conf_idx].loc[self.test_idx == 1].index
         fp_idx = self.test_idx.iloc[conf_idx].loc[self.test_idx == 0].index
         self.fnfp = {
             "pred_proba": pred_proba,
-            "conf_idx": conf_idx, 
-            "conf_proba": conf_proba, 
-            "fn_idx": fn_idx, 
-            "fp_idx": fp_idx
-            }
+            "conf_idx": conf_idx,
+            "conf_proba": conf_proba,
+            "fn_idx": fn_idx,
+            "fp_idx": fp_idx,
+        }
         return self.fnfp
 
     def print_summary(self):
@@ -558,8 +605,6 @@ class Computer:
         print(f"\n ROC_AUC: {self.roc_auc}")
         print(f"\nFalse -/+\n{self.cmx}")
         print(f"\nFalse Negatives Index\n{self.fnfp['fn_idx']}\n")
-
-
 
     """ PLOTS """
 
@@ -571,61 +616,66 @@ class Computer:
         self.cm_fig, self.cmx_norm = self.fusion_matrix(self.cm, self.classes)
         return self
 
-    def fusion_matrix(self, cm, classes, normalize=True, cmap='Blues', show=True): 
+    def fusion_matrix(self, cm, classes, normalize=True, cmap="Blues", show=True):
         """
         FUSION MATRIX!
         -------------
-        
-        matrix: can pass in matrix or a tuple (ytrue,ypred) to create on the fly 
+
+        matrix: can pass in matrix or a tuple (ytrue,ypred) to create on the fly
         classes: class names for target variables
         """
         # make matrix if tuple passed to matrix:
         if isinstance(cm, tuple):
             y_true = cm[0].copy()
             y_pred = cm[1].copy()
-            
-            if y_true.ndim>1:
+
+            if y_true.ndim > 1:
                 y_true = y_true.argmax(axis=1)
-            if y_pred.ndim>1:
+            if y_pred.ndim > 1:
                 y_pred = y_pred.argmax(axis=1)
-            fusion = metrics.confusion_matrix(y_true, y_pred)
+            fusion = confusion_matrix(y_true, y_pred)
         else:
             fusion = cm
         # INTEGER LABELS
         if classes is None:
-            classes=list(range(len(fusion)))
+            classes = list(range(len(fusion)))
 
         if normalize:
-            fusion = fusion.astype('float') / fusion.sum(axis=1)[:, np.newaxis]
-            fmt='.2f'
+            fusion = fusion.astype("float") / fusion.sum(axis=1)[:, np.newaxis]
+            fmt = ".2f"
         else:
-            fmt='d'
-        
+            fmt = "d"
+
         # PLOT
-        fig, _ = plt.subplots(figsize=(10,10))
-        plt.imshow(fusion, cmap=cmap, aspect='equal')
-        
-        # Add title and axis labels 
-        plt.title("Confusion Matrix") 
-        plt.ylabel('TRUE') 
-        plt.xlabel('PRED')
-        
+        fig, _ = plt.subplots(figsize=(10, 10))
+        plt.imshow(fusion, cmap=cmap, aspect="equal")
+
+        # Add title and axis labels
+        plt.title("Confusion Matrix")
+        plt.ylabel("TRUE")
+        plt.xlabel("PRED")
+
         # Add appropriate axis scales
         tick_marks = np.arange(len(classes))
         plt.xticks(tick_marks, classes, rotation=45)
         plt.yticks(tick_marks, classes)
-        
+
         # Text formatting
-        fmt = '.2f' if normalize else 'd'
+        fmt = ".2f" if normalize else "d"
         # Add labels to each cell
-        thresh = fusion.max() / 2.
-        # iterate thru matrix and append labels  
+        thresh = fusion.max() / 2.0
+        # iterate thru matrix and append labels
         for i, j in itertools.product(range(fusion.shape[0]), range(fusion.shape[1])):
-            plt.text(j, i, format(fusion[i, j], fmt),
-                    horizontalalignment='center',
-                    color='white' if fusion[i, j] > thresh else 'black',
-                    size=14, weight='bold')
-        
+            plt.text(
+                j,
+                i,
+                format(fusion[i, j], fmt),
+                horizontalalignment="center",
+                color="white" if fusion[i, j] > thresh else "black",
+                size=14,
+                weight="bold",
+            )
+
         # Add a legend
         plt.colorbar()
         if show:
@@ -647,32 +697,38 @@ class Computer:
         y_true = self.y_test.flatten()
         y_hat = self.model.predict(self.X_test)
 
-        fpr, tpr, thresholds = roc_curve(y_true, y_hat) 
+        fpr, tpr, thresholds = roc_curve(y_true, y_hat)
 
         # Threshold Cutoff for predictions
-        crossover_index = np.min(np.where(1.-fpr <= tpr))
+        crossover_index = np.min(np.where(1.0 - fpr <= tpr))
         crossover_cutoff = thresholds[crossover_index]
-        crossover_specificity = 1.-fpr[crossover_index]
-        roc = roc_auc_score(y_true,y_hat)
+        crossover_specificity = 1.0 - fpr[crossover_index]
+        roc = roc_auc_score(y_true, y_hat)
         print(f"ROC AUC SCORE: {roc}")
 
-        fig,axes=plt.subplots(ncols=2, figsize=(15,6))
+        fig, axes = plt.subplots(ncols=2, figsize=(15, 6))
         axes = axes.flatten()
 
-        ax=axes[0]
-        ax.plot(thresholds, 1.-fpr)
+        ax = axes[0]
+        ax.plot(thresholds, 1.0 - fpr)
         ax.plot(thresholds, tpr)
-        ax.set_title("Crossover at {0:.2f}, Specificity {1:.2f}".format(crossover_cutoff, crossover_specificity))
+        ax.set_title(
+            "Crossover at {0:.2f}, Specificity {1:.2f}".format(
+                crossover_cutoff, crossover_specificity
+            )
+        )
 
-        ax=axes[1]
+        ax = axes[1]
         ax.plot(fpr, tpr)
-        ax.set_title("ROC area under curve: {0:.2f}".format(roc_auc_score(y_true, y_hat)))
+        ax.set_title(
+            "ROC area under curve: {0:.2f}".format(roc_auc_score(y_true, y_hat))
+        )
         fig.show()
-        
+
         return roc, fig
-    
+
     def make_roc_curve(self, show=True):
-        
+
         fig = go.Figure()
         fig.add_shape(type="line", line=dict(dash="dash"), x0=0, x1=1, y0=0, y1=1)
 
@@ -745,10 +801,10 @@ class Computer:
                 marker=dict(color="#119dff"),
             ),
             go.Scatter(
-                x=n_epochs, 
-                y=acc_test, 
-                name="Test Accuracy", 
-                marker=dict(color="#66c2a5")
+                x=n_epochs,
+                y=acc_test,
+                name="Test Accuracy",
+                marker=dict(color="#66c2a5"),
             ),
         ]
         layout = go.Layout(
@@ -770,19 +826,16 @@ class Computer:
         loss_train = self.history["loss"]
         loss_test = self.history["val_loss"]
         n_epochs = list(range(len(loss_train)))
-        
+
         data = [
             go.Scatter(
-                x=n_epochs, 
-                y=loss_train, 
-                name="Training Loss", 
-                marker=dict(color="#119dff")
+                x=n_epochs,
+                y=loss_train,
+                name="Training Loss",
+                marker=dict(color="#119dff"),
             ),
             go.Scatter(
-                x=n_epochs, 
-                y=loss_test, 
-                name="Test Loss", 
-                marker=dict(color="#66c2a5")
+                x=n_epochs, y=loss_test, name="Test Loss", marker=dict(color="#66c2a5")
             ),
         ]
         layout = go.Layout(
@@ -802,13 +855,25 @@ class Computer:
 
 
 class ComputeTest(Computer):
-    def __init__(self, model_name, classes, model, history, X_train, y_train, X_test, y_test, test_idx):
+    def __init__(
+        self,
+        model_name,
+        classes,
+        model,
+        history,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        test_idx,
+    ):
         super().__init__(model_name, "test", classes)
         self.inputs(model, history, X_train, y_train, X_test, y_test, test_idx)
 
+
 class ComputeVal(Computer):
-    def __init__(self, model_name, classes, model, X_test, y_test, X_val, y_val, val_idx):
+    def __init__(
+        self, model_name, classes, model, X_test, y_test, X_val, y_val, val_idx
+    ):
         super().__init__(model_name, "val", classes)
         self.inputs(model, X_test, y_test, X_val, y_val, val_idx)
-
-

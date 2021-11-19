@@ -13,7 +13,7 @@ jobs:
   # The if statement is to prevent cron from running on forks.
   linkcheck:
     runs-on: ubuntu-latest
-    if: github.repository == 'spacetelescope/stsci-package-template'
+    if: github.repository == 'alphasentaurii/mosaic-ml'
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python to build docs with sphinx

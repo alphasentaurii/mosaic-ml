@@ -35,10 +35,10 @@ if [[ $CRPT -ne 0 ]]; then
         echo "Generating synthetic misalignments for ${DATASETS[@]}"
         for dataset in "${DATASETS[@]}"
         do
-            python corrupt.py $SRC $synthetic $permutation -p=$dataset
+            python mosaic_ml.corrupt.py $SRC $synthetic $permutation -p=$dataset
         done
     else
-        python corrupt.py $SRC $synthetic $permutation
+        python mosaic_ml.corrupt.py $SRC $synthetic $permutation
     fi
 fi
 
@@ -69,13 +69,13 @@ fi
 # draw png images
 if [[ $DRAW -ne 0 ]]; then
     mkdir -p $img
-    python make_images.py $synthetic $img -c=1
+    python mosaic_ml.make_images.py $synthetic $img -c=1
 fi
 
 # make dataset
 if [[ $DATA -ne 0 ]]; then  
     synth_data=${OUT}/svm_synthetic.csv
-    python make_dataset.py svm_synth -d=$synthetic -o=$synth_data -c=1
+    python mosaic_ml.make_dataset.py svm_synth -d=$synthetic -o=$synth_data -c=1
 fi
 
 # # Create filter images (for similarity embeddings)

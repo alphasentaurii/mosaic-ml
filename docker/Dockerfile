@@ -35,8 +35,8 @@ RUN yum remove -y kernel-devel   &&\
    time
 
 WORKDIR /home/developer
-RUN mkdir /home/developer/mosaic-ml
-ADD mosaic-ml/ /home/developer/mosaic-ml/
+RUN mkdir /home/developer/mosaic_ml
+ADD mosaic-ml/ /home/developer/mosaic_ml/
 RUN chown -R developer:developer /home/developer
 
 COPY requirements.txt /home/developer/.
@@ -45,5 +45,6 @@ RUN pip install numpy~=1.21
 # ------------------------------------------------
 USER developer
 ENV SVM_QUALITY_TESTING=on
+ENV TF_CPP_MIN_LOG_LEVEL=2
 RUN conda init bash && source ~/.bashrc && conda activate && conda install typing-extensions
 CMD ["/bin/bash"]

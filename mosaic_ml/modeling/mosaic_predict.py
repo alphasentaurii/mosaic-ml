@@ -5,7 +5,8 @@ import argparse
 import os
 import sys
 import datetime as dt
-# mosaicML modules
+
+# mosaic_ml modules
 from preprocessing.load_images import detector_prediction_images
 
 DIM = 3
@@ -15,6 +16,7 @@ DEPTH = DIM * CH
 SHAPE = (DIM, SIZE, SIZE, CH)
 
 TF_CPP_MIN_LOG_LEVEL = 2
+
 
 def get_model(model_path):
     """Loads pretrained Keras functional model"""
@@ -26,8 +28,19 @@ def get_model(model_path):
 def load_regression_data(filepath):
     """Loads preprocessed regression test data from csv"""
     print("Loading regression test data for MLP")
-    data = pd.read_csv(filepath, index_col='index')
-    column_order = ['numexp', 'rms_ra', 'rms_dec', 'nmatches', 'point', 'segment', 'gaia', 'det', 'wcs', 'cat']
+    data = pd.read_csv(filepath, index_col="index")
+    column_order = [
+        "numexp",
+        "rms_ra",
+        "rms_dec",
+        "nmatches",
+        "point",
+        "segment",
+        "gaia",
+        "det",
+        "wcs",
+        "cat",
+    ]
     try:
         X_data = data[column_order]
         print("Input Shape: ", X_data.shape)
@@ -36,7 +49,7 @@ def load_regression_data(filepath):
         print(e)
         print("Dataframe must contain these columns: ", column_order)
         sys.exit(1)
-    
+
 
 def load_image_data(X_data, img_path):
     """Loads total detection png images and converts to arrays"""
@@ -78,38 +91,44 @@ def classify_alignments(model, X):
 
 def classification_report(df, output_file):
     outpath = os.path.dirname(output_file)
-    P, T = df['y_pred'], df['det'].value_counts()
+    P, T = df["y_pred"], df["det"].value_counts()
     C = df.loc[P == 1.0]
-    cmp = C['det'].value_counts()
-    dets = ['HRC', 'IR', 'SBC', 'UVIS', 'WFC']
-    separator = "---"*5
+    cmp = C["det"].value_counts()
+    dets = ["HRC", "IR", "SBC", "UVIS", "WFC"]
+    separator = "---" * 5
     out = sys.stdout
-    with open(f"{outpath}/clf_report.txt", 'w') as f:
+    with open(f"{outpath}/clf_report.txt", "w") as f:
         sys.stdout = f
         print("CLASSIFICATION REPORT - ", dt.datetime.now())
         print(separator)
-        print("Mean Probability Score: ", df['y_proba'].mean())
-        print("Standard Deviation: ", df['y_proba'].std())
+        print("Mean Probability Score: ", df["y_proba"].mean())
+        print("Standard Deviation: ", df["y_proba"].std())
         print(separator)
         print("Aligned ('0.0') vs Misaligned ('1.0')")
-        print(pd.concat([P.value_counts(), P.value_counts(normalize=True)], axis=1, keys=['cnt', 'pct']))
+        print(
+            pd.concat(
+                [P.value_counts(), P.value_counts(normalize=True)],
+                axis=1,
+                keys=["cnt", "pct"],
+            )
+        )
         print(separator)
         print("Misalignment counts by Detector")
         for i, d in enumerate(dets):
             print(f"{d}\t{cmp[i]} \t ({T[i]}) \t ({np.round((cmp[i]/T[i])*100, 1)}%)")
         sys.stdout = out
     print(f"\nClassification Report created: {outpath}/clf_report.txt")
-    with open(f"{outpath}/compromised.txt", 'w') as file:
-        for line in list(C['y_pred'].index):
+    with open(f"{outpath}/compromised.txt", "w") as file:
+        for line in list(C["y_pred"].index):
             file.writelines(f"{line}\n")
     print(f"\nSuspicious/Compromised List created: {outpath}/compromised.txt")
 
 
 def save_preds(X_data, y_pred, y_proba, output_file):
     preds = np.concatenate([y_pred, y_proba], axis=1)
-    pred_proba = pd.DataFrame(preds, index=X_data.index, columns=['y_pred', 'y_proba'])
+    pred_proba = pd.DataFrame(preds, index=X_data.index, columns=["y_pred", "y_proba"])
     preds = X_data.join(pred_proba)
-    preds['index'] = preds.index
+    preds["index"] = preds.index
     preds.to_csv(output_file, index=False)
     print("Y_PRED + Probabilities added. Dataframe saved as: ", output_file)
     classification_report(preds, output_file)
@@ -123,12 +142,31 @@ def main(model_path, data_file, img_path, output_file):
     save_preds(X_data, y_pred, y_proba, output_file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_file", type=str, default="data/svm_unlabeled.csv", help="path to preprocessed mosaic data csv file")
-    parser.add_argument("img_path", type=str, default="data/img", help="path to PNG mosaic images")
-    parser.add_argument("-m", "--model_path", type=str, default="models/svm_ensemble", help="saved model path")
-    parser.add_argument("-o", "--output_file", type=str, default="data/svm_predicted.csv", help="path to updated mosaic data csv file (includes alignment predictions and probabilities).")
+    parser.add_argument(
+        "data_file",
+        type=str,
+        default="data/svm_unlabeled.csv",
+        help="path to preprocessed mosaic data csv file",
+    )
+    parser.add_argument(
+        "img_path", type=str, default="data/img", help="path to PNG mosaic images"
+    )
+    parser.add_argument(
+        "-m",
+        "--model_path",
+        type=str,
+        default="data/models/ensembleSVM",
+        help="saved model path",
+    )
+    parser.add_argument(
+        "-o",
+        "--output_file",
+        type=str,
+        default="data/results/ensembleSVM/preds/svm_predicted.csv",
+        help="path to csv file for storing classifier predictions.",
+    )
     args = parser.parse_args()
     data_file = args.data_file
     img_path = args.img_path

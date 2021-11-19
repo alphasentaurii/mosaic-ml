@@ -30,7 +30,7 @@ if [[ ${MOVEPOS} -ne "" ]]; then
 fi
 
 if [[ -z $SYNTH ]]; then
-    python mosaic_train.py $REG $IMG
+    python mosaic_ml.mosaic_train.py $REG $IMG
 else
-    python mosaic_train.py $REG $IMG -c=$SYNTH
+    python mosaic_ml.mosaic_train.py $REG $IMG -c=$SYNTH
 fi

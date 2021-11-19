@@ -26,11 +26,11 @@ pos=${IMG}/1
 mkdir -p $neg && mkdir -p $pos
 
 if [[ ${DATA} -ne "" ]]; then
-    python make_dataset.py $H5 -d=$SRCPATH -o=$CSV
+    python mosaic_ml.make_dataset.py $H5 -d=$SRCPATH -o=$CSV
 fi
 
 if [[ ${DRAW} -ne "" ]]; then
-    python make_images.py $SRCPATH -o=$neg
+    python mosaic_ml.make_images.py $SRCPATH -o=$neg
 fi
 
 

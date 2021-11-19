@@ -1,9 +1,9 @@
 import pytest
 import os
 
-# from mosaicML.analysis import eda
-# from mosaicML.preprocessing import make_dataset
-# from mosaicML.modeling import ensemble
+# from mosaic_ml.analysis import eda
+# from mosaic_ml.preprocessing import make_dataset
+# from mosaic_ml.modeling import ensemble
 
 
 # def test_data_import():

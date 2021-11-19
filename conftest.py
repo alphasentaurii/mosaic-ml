@@ -8,7 +8,7 @@ PYTEST_HEADER_MODULES = {}
 TESTED_VERSIONS = {}
 
 try:
-    from mosaicML import __version__ as version
+    from mosaic_ml import __version__ as version
 except ImportError:
     version = 'unknown'
 
@@ -24,4 +24,4 @@ enable_deprecations_as_exceptions()
 # PYTEST_HEADER_MODULES.pop('Pandas')
 # PYTEST_HEADER_MODULES.pop('h5py')
 
-TESTED_VERSIONS['mosaicML'] = version
+TESTED_VERSIONS['mosaic_ml'] = version

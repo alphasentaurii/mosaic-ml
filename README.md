@@ -6,14 +6,23 @@
 
 <!-- [![GitHub Actions CI Status](https://github.com/spacetelescope/stsci-package-template/workflows/CI/badge.svg](https://github.com/alphasentaurii/mosaic-ml/actions) -->
 
-Machine Learning for the Hubble Space Telescope Mosaic Image Alignment Processing Pipeline
+Machine Learning Quality Analysis Tools for Hubble Space Telescope Mosaic Image Alignment 
 
-MosaicML is a machine learning package for evaluating the alignment results of HST mosaic images. The neural network is an "ensemble" of two models: a multi-layer perceptron (MLP) for regression test results and a 3D Image CNN  
+mosaic_ml provides a customized neural network architecture to support QA regression testing of HST mosaic image alignments. The pre-trained neural network included in this repository is an ensemble of two models: a 3D Image Convolutional Neural Network (CNN) for the final drizzle products, and a Multi-Layer Perceptron (MLP) for the statistical data associated with these images (generated via Drizzlepac as part of STScI's standard regression testing for HAP products such as Single Visit Mosaics and the Drizzlepac code used to create them).  The Ensemble model is designed to learn from mixed inputs (numeric data for the MLP and 3-dimensional images for the CNN).
+
+The mosaic_ml repo can be applied using 4 primary workflows:
+
+I. Inference (classify new data)
+II. Learning (train or update model)
+III. Synthesis (generate artificial data)
+IV. Analysis (Exploratory Data Analysis and Model Performance Evaluation)
+
+Below are a few example commands for running these in Python - Bash scripts are also included in the `scripts` directory for automating an entire workflow, which is especially convenient for large datasets. 
 
 
 ```bash
 mosaic-ml
-└── mosaicML
+└── mosaic_ml
     └── __init__.py
     └── analysis
         └── eda.py
@@ -84,20 +93,22 @@ $ sh scripts/run-container.sh path/to/my/data
 
 # Run Mosaic-ML
 
-The Mosaic-ML package has 3 primary functions:
-
-I. Inference (classify new data)
-II. Learning (train model)
-III. Synthesis (generate artificial data)
-
 
 ## I. Inference (Classify new data)
 
+Steps:
+
+1. `make_dataset.py` : Scrape JSON and FITS files from Single Visit Mosaic source directory
+2. `make_images.py` : Generate PNG images for the total detection final products
+3. `mosaic_predict.py`: Load pre-trained model to classify the alignments as "valid" (0) or compromised (1).
+
+
 ```bash
-python make_dataset.py svm_unlabeled -d=path/to/datasets -o=svm_unlabeled.csv
-python make_images.py path/to/svm/files -o=path/to/images
+python make_dataset.py path/to/datasets -d=svm_unlabeled -o=svm_unlabeled.csv
+python make_images.py path/to/svm/files -o=path/to/save/png/images
 python mosaic_predict.py svm_unlabeled.csv path/to/png/images -m=models/svm_ensemble -o=predictions.csv
 ```
+
 
 ----
 
@@ -160,6 +171,6 @@ The `svm-synthesize.sh` script automates the entire workflow from corruption thr
 
 ```bash
 $ export DATASETS=`cat listofvisits.txt`
-$ cd mosaic-ml/mosaicML
+$ cd mosaic-ml/mosaic_ml
 $ bash svm-synthesize.sh 1 1 0 1 # run corruption, run svm, don't run image gen, make dataset 
 ```

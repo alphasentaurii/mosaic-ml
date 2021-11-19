@@ -2,6 +2,6 @@
 """
 This module contains package tests.
 """
-from mosaicML import *
+from mosaic_ml import *
 
 __all__ = []
