@@ -1,5 +1,5 @@
-tensorflow==2.6.2
+tensorflow==2.11.1
 progressbar==2.5
-tqdm==4.62.3
+tqdm==4.66.3
 tables==3.6.1
 plotly~=5.3.1
